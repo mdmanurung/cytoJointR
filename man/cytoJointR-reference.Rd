@@ -1,0 +1,52 @@
+\name{cytoJointR-reference}
+\alias{cj_bits}
+\alias{cj_compress}
+\alias{cj_log_trunc_gaussian_raw}
+\alias{cj_log_trunc_gaussian_compressed}
+\alias{cj_log_multinomial}
+\alias{cj_counterfactual}
+\alias{cj_scores_from_probs}
+\alias{cj_simulate_cells}
+\title{Reference utilities for cytoJointR development}
+\description{Provides deterministic data-frame compression, conditional Gaussian log likelihoods and marginal-matched polyfunctionality scores. Full joint hierarchical inference remains unimplemented.}
+\usage{
+cj_bits(markers)
+cj_compress(cells, markers, sample = "sample_id", donor = "donor_id", condition = "condition", positive = paste0(markers, "_pos"), thresholds = NULL, metadata = c("cell_subset", "stimulus", "visit", "batch", "group"))
+cj_log_trunc_gaussian_raw(x, mu, sigma, threshold, positive)
+cj_log_trunc_gaussian_compressed(n, sx, ss, mu, sigma, threshold, positive)
+cj_log_multinomial(n, p)
+cj_counterfactual(p_u, p_s, bits, tol = 1e-10, max_iter = 10000L)
+cj_scores_from_probs(p_u, p_s, bits, min_functional = NULL)
+cj_simulate_cells(donors = 12L, cells_per_sample = 1500L, markers = c("IFNG", "TNF", "IL2"), regime = c("antigen", "polyclonal"), missing_controls = 0.2, seed = 1L, threshold = 0)
+}
+\arguments{
+\item{markers}{Character vector of marker names.}
+\item{cells}{One event per row in a data.frame, with sample metadata.}
+\item{sample}{Sample identifier column.}
+\item{donor}{Donor identifier column.}
+\item{condition}{Stimulation-condition column.}
+\item{positive}{Named or ordered columns containing binary positivity calls.}
+\item{thresholds}{Named transformed-fluorescence thresholds, ordered like markers.}
+\item{metadata}{Additional sample-level metadata fields.}
+\item{x}{Vector of transformed fluorescence values.}
+\item{mu}{Gaussian mean.}
+\item{sigma}{Gaussian standard deviation.}
+\item{threshold}{Fixed transformed positivity cutoff.}
+\item{n}{Number of cells or counts for one category.}
+\item{sx}{Sum of transformed fluorescence.}
+\item{ss}{Sum of squared transformed fluorescence.}
+\item{p}{Probability vector of mutually exclusive patterns.}
+\item{p_u}{Unstimulated pattern-probability vector.}
+\item{p_s}{Stimulated pattern-probability vector.}
+\item{bits}{Matrix of binary marker patterns.}
+\item{tol}{Convergence tolerance for IPF.}
+\item{max_iter}{Maximum iterations for IPF.}
+\item{donors}{Number of donors in the synthetic experiment.}
+\item{cells_per_sample}{Acquired cells per observed donor-condition sample.}
+\item{regime}{Antigen-specific or polyclonal simulation regime.}
+\item{missing_controls}{Fraction of deliberately missing control samples.}
+\item{seed}{Random seed.}
+\item{min_functional}{Deprecated compatibility argument, ignored with a warning when supplied; inspect positivity denominators and support diagnostics.}
+}
+\value{Depending on the function: binary pattern matrix, compressed object, numeric log likelihood, pattern-probability vector or named functional scores.}
+\details{This reference version does not contain the planned RTMB joint hierarchical inference engine. Results from the reference functions are not empirical Bayesian posterior estimates.}

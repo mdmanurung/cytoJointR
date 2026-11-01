@@ -1,0 +1,7 @@
+.Rproj.user
+.Rhistory
+*.tar.gz
+*.Rcheck/
+inst/stan/*
+!inst/stan/*.stan
+_site/

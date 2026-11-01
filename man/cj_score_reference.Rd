@@ -1,0 +1,22 @@
+\name{cj_score_reference}
+\alias{cj_score_reference}
+\alias{cj_summarize_signed}
+\title{Deterministic signed score and exact attribution references}
+\usage{
+cj_score_reference(p_u, p_s, bits, excess_u = NULL,
+  excess_s = NULL, reference_weights = NULL, reference_scale = NULL)
+cj_summarize_signed(draws, epsilon, level = 0.95)
+}
+\arguments{
+\item{p_u, p_s}{Normalized strictly positive pattern probabilities.}
+\item{bits}{Complete binary matrix, patterns by markers.}
+\item{excess_u, excess_s}{Optional nonnegative conditional fluorescence excess matrices, zero in marker-negative states.}
+\item{reference_weights}{Optional fixed FIS weights, zero in negative states, summing to one per marker.}
+\item{reference_scale}{Optional positive fixed scales named in marker order for standardized FIS.}
+\item{draws}{A nonempty finite numeric vector of supplied aligned-derived draws.}
+\item{epsilon}{Prespecified nonnegative meaningful-effect threshold in score units.}
+\item{level}{Central interval probability.}
+}
+\description{Calculate signed score algebra and mutually exclusive pattern contributions. These functions fit no model and establish no uncertainty calibration.}
+\value{The score function returns global, pattern, marker and intensity tables with numerical diagnostics. The summary function returns the mean, central interval and threshold probabilities from supplied draws.}
+\details{Marker marginals overlap. Exact pattern contributions are additive. Absolute polyfunctional change equals its marginal path contribution plus coordination. FIS is reported in raw chosen transformed units, with optional fixed-scale standardization. Nonfinite draws are rejected rather than silently dropped. Supplied fluorescence values must be expected positive gate excess, not untruncated Gaussian locations.}

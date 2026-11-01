@@ -1,0 +1,4 @@
+url: ~
+destination: _site
+template:
+  bootstrap: 5

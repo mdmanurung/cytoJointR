@@ -1,0 +1,34 @@
+Package: cytoJointR
+Title: Donor-Paired Joint Inference for Polyfunctional Cytokine Assays
+Version: 0.0.0.9000
+Authors@R: person("Mikhael", "Manurung", email = "mikhael.manurung@gmail.com",
+    role = c("aut", "cre"))
+Description: Bayesian inference on intracellular cytokine staining (ICS)
+    flow cytometry data. Models exact Boolean marker patterns within donors,
+    relative to each donor's matched control sample, across stimulations and
+    visits, and derives signed net scores (magnitude, polyfunctionality,
+    coordination) from aligned posterior draws. Includes a descriptive layer
+    and an adapter to the 'COMPASS' package.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Depends: R (>= 4.1.0)
+Imports:
+    cmdstanr (>= 0.8.0),
+    posterior,
+    ggplot2,
+    stats,
+    utils
+Suggests:
+    COMPASS,
+    ComplexHeatmap,
+    flowCore,
+    flowWorkspace,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0),
+    withr
+Additional_repositories: https://stan-dev.r-universe.dev
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.1.0

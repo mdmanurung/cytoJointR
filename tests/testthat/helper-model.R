@@ -37,3 +37,18 @@ expect_diagnostics_clean <- function(fit) {
   testthat::expect_gt(dg$min_ess_bulk, 200)
   testthat::expect_gt(min(dg$ebfmi), 0.3)
 }
+
+# Stan log_lik against the R reference at one prior-drawn parameter vector.
+loglik_r_vs_stan <- function(sim, seed = 1) {
+  d <- sim$design
+  pr <- cytoJointR:::cj_resolve_priors(list(), d)
+  set.seed(seed)
+  par <- cytoJointR:::m1_prior_draw(d, pr)
+  p <- cytoJointR:::m1_softmax(cytoJointR:::m1_eta(d, par))
+  ll_r <- vapply(seq_len(nrow(p)), \(s) cj_log_multinomial(sim$data$counts[s, ], p[s, ]), 0)
+  v <- cytoJointR:::m1_stan_vector(par, d)
+  gq <- cytoJointR:::m1_compile()$generate_quantities(
+    fitted_params = posterior::as_draws_matrix(matrix(v, 1, dimnames = list(NULL, names(v)))),
+    data = cytoJointR:::m1_stan_data(d, sim$data$counts, pr), seed = 1, sig_figs = 18)
+  list(r = ll_r, stan = as.numeric(gq$draws("log_lik", format = "matrix")))
+}

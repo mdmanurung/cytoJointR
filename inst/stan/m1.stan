@@ -89,7 +89,7 @@ model {
 generated quantities {
   array[S] vector[K] p;
   vector[S] log_lik;
-  vector[Dd * (Dd - 1) %/% 2] rho;
+  vector[(Dd * (Dd - 1)) %/% 2] rho;
   {
     matrix[S, K] eta = eta_matrix(alpha, gamma, theta0, delta, tau, L_Omega, z, tau_u,
                                   u_raw, X, Xs, W, donor_of, dv_of, Bt, Bpt);

@@ -22,6 +22,7 @@ export(cj_score_reference)
 export(cj_scores_from_probs)
 export(cj_simulate_cells)
 export(cj_summarize_signed)
+importFrom(ggplot2,.data)
 importFrom(stats,
   dnorm,
   pnorm,

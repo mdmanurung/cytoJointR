@@ -39,11 +39,16 @@ expect_diagnostics_clean <- function(fit) {
 }
 
 # Stan log_lik against the R reference at one prior-drawn parameter vector.
-loglik_r_vs_stan <- function(sim, seed = 1) {
+loglik_r_vs_stan <- function(sim, seed = 1, centered = FALSE) {
   d <- sim$design
   pr <- cytoJointR:::cj_resolve_priors(list(), d)
   set.seed(seed)
   par <- cytoJointR:::m1_prior_draw(d, pr)
+  if (centered) {                                  # same effects, raw scale
+    d$centered <- 1L
+    if (d$use_donor) par$z <- diag(par$tau, length(par$tau)) %*% par$L_Omega %*% par$z
+    if (d$use_dv) par$u_raw <- par$tau_u * par$u_raw
+  }
   p <- cytoJointR:::m1_softmax(cytoJointR:::m1_eta(d, par))
   ll_r <- vapply(seq_len(nrow(p)), \(s) cj_log_multinomial(sim$data$counts[s, ], p[s, ]), 0)
   v <- cytoJointR:::m1_stan_vector(par, d)

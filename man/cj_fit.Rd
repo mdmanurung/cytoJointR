@@ -13,6 +13,7 @@ cj_fit(
   priors = list(),
   donor_visit = TRUE,
   donor_effects = TRUE,
+  centered = FALSE,
   ...
 )
 }
@@ -30,9 +31,16 @@ the ablation). Ignored, with a message, when the data hold one visit.}
 \item{donor_effects}{Include donor effects \verb{(b_i, r_im)}; \code{FALSE} gives a
 fixed-effects-only model.}
 
+\item{centered}{Sample donor effects \verb{(b, r)} and \code{u} on their natural scale
+instead of the noncentered default. Both give the same posterior. With many
+cells per sample (data-dominated donors) the noncentered form needs very small
+steps; in a J = 3, 24-donor, 10 000-cell benchmark the centered form with a dense
+metric (set automatically) took about a quarter of the time. \code{FALSE} keeps the
+SCOPE default.}
+
 \item{...}{Passed to the CmdStanModel \verb{$sample()} method (for example
-\code{adapt_delta}). \code{refresh = 0} and \code{parallel_chains = min(chains, 4)} are
-the defaults.}
+\code{adapt_delta}). Defaults: \code{refresh = 0}, \code{parallel_chains = min(chains, 4)},
+\code{metric = "dense_e"} if \code{centered} else \code{"diag_e"}, \code{sig_figs = 18} (so probabilities sum to one to machine precision).}
 }
 \value{
 A \code{cj_fit}. \verb{$draws$p} holds probabilities for every sample

@@ -1,23 +1,26 @@
 // cytoJointR M1: donor-paired log-linear model of exact marker-pattern counts.
 // eta_sk = sum_j B_kj a_sj + sum_{j<l} B_kj B_kl theta_sjl, p_s = softmax(eta_s).
+// z and u_raw are standardised (noncentered, default) or raw (centered) effects.
 // a_sj  = alpha_j + X_s gamma_j + (donor effect, loading W_s) + (donor x visit effect).
 // theta_s = theta0 + Xs_s delta.   All design matrices are built in R (cj_design()).
 functions {
+  matrix DE_of(vector tau, matrix L_Omega, matrix z, int centered) {
+    if (centered || num_elements(z) == 0) return z;
+    return diag_pre_multiply(tau, L_Omega) * z;
+  }
+  vector u_of(vector tau_u, vector u_raw, int centered) {
+    if (centered || num_elements(u_raw) == 0) return u_raw;
+    return tau_u[1] * u_raw;
+  }
+  // DE: Dd x Ndon realised donor effects; u: realised donor x visit deviations.
   matrix eta_matrix(vector alpha, matrix gamma, vector theta0, matrix delta,
-                    vector tau, matrix L_Omega, matrix z, vector tau_u, vector u_raw,
-                    matrix X, matrix Xs, matrix W, array[] int donor_of,
+                    matrix DE, vector u, matrix X, matrix Xs, matrix W, array[] int donor_of,
                     array[] int dv_of, matrix Bt, matrix Bpt) {
     int S = rows(X);
     int J = rows(Bt);
     vector[S] shift = rep_vector(0, S);
-    if (num_elements(z) > 0) {
-      matrix[cols(W), cols(z)] DE = diag_pre_multiply(tau, L_Omega) * z;
-      shift += columns_dot_product(W', DE[:, donor_of])';
-    }
-    if (num_elements(u_raw) > 0) {
-      vector[num_elements(u_raw)] u = tau_u[1] * u_raw;
-      shift += u[dv_of];
-    }
+    if (num_elements(DE) > 0) shift += columns_dot_product(W', DE[:, donor_of])';
+    if (num_elements(u) > 0) shift += u[dv_of];
     matrix[S, J] A = rep_matrix(alpha', S) + X * gamma + shift * rep_row_vector(1, J);
     matrix[S, cols(delta)] TH = rep_matrix(theta0', S) + Xs * delta;
     return A * Bt + TH * Bpt;
@@ -34,6 +37,7 @@ data {
   int<lower=1> G;                        // donor x visit groups
   int<lower=0, upper=1> use_donor;
   int<lower=0, upper=1> use_dv;
+  int<lower=0, upper=1> centered;        // 1: z and u_raw are the raw effects
   array[S, K] int<lower=0> y;
   matrix[S, Pf] X;
   matrix[S, M] Xs;                       // stimulation indicators
@@ -76,14 +80,20 @@ model {
   if (use_donor) {
     tau ~ normal(0, tau_sd);
     L_Omega ~ lkj_corr_cholesky(lkj_eta);
-    to_vector(z) ~ std_normal();
+    if (centered) {
+      matrix[Dd, Dd] LS = diag_pre_multiply(tau, L_Omega);
+      for (i in 1:Nz) z[, i] ~ multi_normal_cholesky(rep_vector(0, Dd), LS);
+    } else {
+      to_vector(z) ~ std_normal();
+    }
   }
   if (use_dv) {
     tau_u ~ normal(0, tau_u_sd);
-    u_raw ~ std_normal();
+    if (centered) u_raw ~ normal(0, tau_u[1]);
+    else u_raw ~ std_normal();
   }
-  matrix[S, K] eta = eta_matrix(alpha, gamma, theta0, delta, tau, L_Omega, z, tau_u,
-                                u_raw, X, Xs, W, donor_of, dv_of, Bt, Bpt);
+  matrix[S, K] eta = eta_matrix(alpha, gamma, theta0, delta, DE_of(tau, L_Omega, z, centered),
+                                u_of(tau_u, u_raw, centered), X, Xs, W, donor_of, dv_of, Bt, Bpt);
   for (s in 1:S) y[s] ~ multinomial_logit(eta[s]');
 }
 generated quantities {
@@ -91,8 +101,8 @@ generated quantities {
   vector[S] log_lik;
   vector[(Dd * (Dd - 1)) %/% 2] rho;
   {
-    matrix[S, K] eta = eta_matrix(alpha, gamma, theta0, delta, tau, L_Omega, z, tau_u,
-                                  u_raw, X, Xs, W, donor_of, dv_of, Bt, Bpt);
+    matrix[S, K] eta = eta_matrix(alpha, gamma, theta0, delta, DE_of(tau, L_Omega, z, centered),
+                                  u_of(tau_u, u_raw, centered), X, Xs, W, donor_of, dv_of, Bt, Bpt);
     for (s in 1:S) {
       p[s] = softmax(eta[s]');
       log_lik[s] = multinomial_logit_lpmf(y[s] | eta[s]');

@@ -18,15 +18,17 @@
 #' @param donor_effects Include donor effects `(b_i, r_i1..r_iM)`.
 #' @param donor_visit Include the donor-by-visit basal deviation `u_iv`. Switched
 #'   off with a message when the data hold a single visit.
+#' @param centered Sample donor effects on their natural scale instead of the
+#'   noncentered (standardised) scale. See [cj_fit()].
 #' @return A list of class `cj_design`: matrices `X`, `Xs`, `W`, `B`, `Bpair`,
 #'   index vectors, flags, `col_info`, `dropped` and `param_map` (Stan name to label).
 #' @export
-cj_design <- function(x, donor_effects = TRUE, donor_visit = TRUE) {
+cj_design <- function(x, donor_effects = TRUE, donor_visit = TRUE, centered = FALSE) {
   stopifnot(inherits(x, "cj_data"))
-  m1_design(x$samples, x$bits, donor_effects, donor_visit)
+  m1_design(x$samples, x$bits, donor_effects, donor_visit, centered)
 }
 
-m1_design <- function(samples, bits, donor_effects = TRUE, donor_visit = TRUE) {
+m1_design <- function(samples, bits, donor_effects = TRUE, donor_visit = TRUE, centered = FALSE) {
   stims <- sort(setdiff(unique(as.character(samples$condition)), CONTROL_CONDITION))
   if (!length(stims)) stop("no stimulated samples: nothing to model", call. = FALSE)
   visits <- levels(droplevels(samples$visit))
@@ -69,7 +71,7 @@ m1_design <- function(samples, bits, donor_effects = TRUE, donor_visit = TRUE) {
             col_info = do.call(rbind, unname(info)), dropped = dropped,
             donors = donors, donor_of = match(as.character(samples$donor_id), donors),
             dv = dv, dv_of = match(dv_key, paste(dv$donor_id, dv$visit, sep = "@")),
-            use_donor = as.integer(donor_effects), use_dv = as.integer(donor_visit),
+            use_donor = as.integer(donor_effects), use_dv = as.integer(donor_visit), centered = as.integer(centered),
             sample_id = samples$sample_id)
   d$param_map <- m1_param_map(d)
   structure(d, class = "cj_design")
@@ -111,10 +113,10 @@ m1_eta <- function(d, par) {
   S <- nrow(d$X)
   shift <- numeric(S)
   if (d$use_donor) {
-    DE <- diag(par$tau, length(par$tau)) %*% par$L_Omega %*% par$z      # Dd x Ndon
+    DE <- if (d$centered) par$z else diag(par$tau, length(par$tau)) %*% par$L_Omega %*% par$z
     shift <- shift + rowSums(d$W * t(DE[, d$donor_of, drop = FALSE]))
   }
-  if (d$use_dv) shift <- shift + (par$tau_u * par$u_raw)[d$dv_of]
+  if (d$use_dv) shift <- shift + (if (d$centered) par$u_raw else par$tau_u * par$u_raw)[d$dv_of]
   A <- sweep(d$X %*% par$gamma, 2L, par$alpha, "+") + shift
   TH <- sweep(d$Xs %*% par$delta, 2L, par$theta0, "+")
   eta <- A %*% t(d$B) + TH %*% t(d$Bpair)

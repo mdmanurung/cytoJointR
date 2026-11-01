@@ -10,7 +10,7 @@ m1_compile <- function() {
 m1_stan_data <- function(d, counts, pr) {
   list(S = nrow(d$X), K = nrow(d$B), J = ncol(d$B), M = ncol(d$Xs), P = ncol(d$Bpair),
        Pf = ncol(d$X), Ndon = length(d$donors), G = nrow(d$dv),
-       use_donor = d$use_donor, use_dv = d$use_dv,
+       use_donor = d$use_donor, use_dv = d$use_dv, centered = d$centered,
        y = unname(counts), X = unname(d$X), Xs = unname(d$Xs), W = unname(d$W),
        donor_of = d$donor_of, dv_of = d$dv_of,
        Bt = unname(t(d$B)), Bpt = unname(t(d$Bpair)),
@@ -37,9 +37,15 @@ m1_stan_data <- function(d, counts, pr) {
 #'   the ablation). Ignored, with a message, when the data hold one visit.
 #' @param donor_effects Include donor effects `(b_i, r_im)`; `FALSE` gives a
 #'   fixed-effects-only model.
+#' @param centered Sample donor effects `(b, r)` and `u` on their natural scale
+#'   instead of the noncentered default. Both give the same posterior. With many
+#'   cells per sample (data-dominated donors) the noncentered form needs very small
+#'   steps; in a J = 3, 24-donor, 10 000-cell benchmark the centered form with a dense
+#'   metric (set automatically) took about a quarter of the time. `FALSE` keeps the
+#'   SCOPE default.
 #' @param ... Passed to the CmdStanModel `$sample()` method (for example
 #'   `adapt_delta`). Defaults: `refresh = 0`, `parallel_chains = min(chains, 4)`,
-#'   `sig_figs = 18` (so probabilities sum to one to machine precision).
+#'   `metric = "dense_e"` if `centered` else `"diag_e"`, `sig_figs = 18` (so probabilities sum to one to machine precision).
 #' @return A `cj_fit`. `$draws$p` holds probabilities for every sample
 #'   (`draw_kind = "in_sample_donor_conditional"`), `$design` the design and
 #'   parameter map, `$diagnostics` R-hat, ESS, divergences, treedepth and E-BFMI,
@@ -52,11 +58,12 @@ m1_stan_data <- function(d, counts, pr) {
 #' }
 #' @export
 cj_fit <- function(x, chains = 4L, iter_warmup = 1000L, iter_sampling = 1000L, seed = 1L,
-                   priors = list(), donor_visit = TRUE, donor_effects = TRUE, ...) {
+                   priors = list(), donor_visit = TRUE, donor_effects = TRUE, centered = FALSE, ...) {
   stopifnot(inherits(x, "cj_data"))
-  d <- cj_design(x, donor_effects, donor_visit)
+  d <- cj_design(x, donor_effects, donor_visit, centered)
   pr <- cj_resolve_priors(priors, d)
-  args <- utils::modifyList(list(refresh = 0, parallel_chains = min(chains, 4L), sig_figs = 18), list(...))
+  args <- utils::modifyList(list(refresh = 0, parallel_chains = min(chains, 4L), sig_figs = 18,
+                           metric = if (centered) "dense_e" else "diag_e"), list(...))
   engine <- do.call(m1_compile()$sample,
                     c(list(data = m1_stan_data(d, x$counts, pr), chains = chains,
                            iter_warmup = iter_warmup, iter_sampling = iter_sampling,
@@ -73,7 +80,8 @@ cj_fit <- function(x, chains = 4L, iter_warmup = 1000L, iter_sampling = 1000L, s
   draws <- new_cj_draws(p, x$samples, x$contrasts, x$bits,
                         list(engine_id = "cmdstan-hmc", model_id = "M1", seed = as.integer(seed),
                              n_draws = n, draw_kind = "in_sample_donor_conditional",
-                             donor_effects = d$use_donor == 1L, donor_visit = d$use_dv == 1L))
+                             donor_effects = d$use_donor == 1L, donor_visit = d$use_dv == 1L,
+                             centered = d$centered == 1L))
   new_cj_fit(x, draws, engine, d, pr, m1_diagnostics(engine, d))
 }
 

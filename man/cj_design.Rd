@@ -4,7 +4,7 @@
 \alias{cj_design}
 \title{Design matrices and parameter map of the M1 count model}
 \usage{
-cj_design(x, donor_effects = TRUE, donor_visit = TRUE)
+cj_design(x, donor_effects = TRUE, donor_visit = TRUE, centered = FALSE)
 }
 \arguments{
 \item{x}{A \code{cj_data} object.}
@@ -13,6 +13,9 @@ cj_design(x, donor_effects = TRUE, donor_visit = TRUE)
 
 \item{donor_visit}{Include the donor-by-visit basal deviation \code{u_iv}. Switched
 off with a message when the data hold a single visit.}
+
+\item{centered}{Sample donor effects on their natural scale instead of the
+noncentered (standardised) scale. See \code{\link[=cj_fit]{cj_fit()}}.}
 }
 \value{
 A list of class \code{cj_design}: matrices \code{X}, \code{Xs}, \code{W}, \code{B}, \code{Bpair},

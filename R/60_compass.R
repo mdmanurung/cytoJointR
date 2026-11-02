@@ -103,7 +103,13 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
                           row.names = NULL)
     meta <- data.frame(donor_id = cg$donor_id, stimulation = cg$stimulation,
                        visit = cg$visit, parent_population = cg$parent_population)
-    run <- function() COMPASS::SimpleCOMPASS(n_s, n_u, meta, "donor_id", ...)
+    # SimpleCOMPASS() skips the posterior that PosteriorDiff() and friends read;
+    # COMPASS() computes it with the same unexported helper.
+    run <- function() {
+      f <- COMPASS::SimpleCOMPASS(n_s, n_u, meta, "donor_id", ...)
+      f$fit$posterior <- utils::getFromNamespace("compute_posterior", "COMPASS")(f)
+      f
+    }
     fit <- tryCatch({
       res <- NULL
       if (verbose) res <- run() else utils::capture.output(res <- suppressMessages(run()))

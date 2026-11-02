@@ -28,6 +28,11 @@ test_that("cj_compass runs real COMPASS and returns native results", {
   null <- COMPASS::SimpleCOMPASS(dd$n_u, dd$n_u, dd$meta, "donor_id",
                                  iterations = 200, replications = 2)
   expect_gt(mean(tid$compass_FS), mean(COMPASS::FunctionalityScore(null)))
+  # The adapter computes the posterior, so COMPASS's own accessors work.
+  pd <- COMPASS::PosteriorDiff(f)
+  expect_equal(nrow(pd), nrow(f$data$n_s))
+  expect_equal(rownames(pd), rownames(f$data$n_s))
+  expect_false(anyNA(pd))
   # The default filter's effect is reported.
   expect_true(all(c("n_removed", "removed") %in% names(cc$filters)))
   expect_equal(nrow(cc$filters), 2)

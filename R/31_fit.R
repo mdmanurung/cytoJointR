@@ -1,9 +1,23 @@
 # Fit the M1 count model with cmdstanr and wrap the result in cj_fit.
 
+# Parallel test workers share the cache, so nobody compiles into it directly:
+# build in a per-process temp dir, copy beside the target, then rename into place.
+# ponytail: rename is atomic only within one filesystem, and NFS semantics apply
+# (a stale handle is possible); use a lock file if NFS races are ever seen.
 m1_compile <- function() {
+  stan <- system.file("stan", "m1.stan", package = "cytoJointR")
   dir <- tools::R_user_dir("cytoJointR", "cache")
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
-  cmdstanr::cmdstan_model(system.file("stan", "m1.stan", package = "cytoJointR"), dir = dir)
+  exe <- file.path(dir, "m1")
+  if (!file.exists(exe) || file.mtime(exe) <= file.mtime(stan)) {
+    build <- tempfile("m1_build_")
+    dir.create(build)
+    on.exit(unlink(build, recursive = TRUE))
+    built <- cmdstanr::cmdstan_model(stan, dir = build)
+    staged <- tempfile("m1_", dir)
+    stopifnot(file.copy(built$exe_file(), staged), file.rename(staged, exe))
+  }
+  cmdstanr::cmdstan_model(stan, exe_file = exe, compile = FALSE)
 }
 
 # The list Stan receives as data.

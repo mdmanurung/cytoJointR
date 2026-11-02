@@ -34,20 +34,20 @@ test_that("an IPF failure is flagged and kept, not dropped", {
     r$ok[seq_along(r$ok) %% 5 == 0] <- FALSE
     r
   })
-  sd <- cj_score_draws(d)
+  sd <- cj_score_draws(d, ccs_gate = NULL)
   expect_equal(nrow(sd), 20 * 12 * 9)  # nothing dropped: 12 contrasts, 9 score columns
   failed <- sd[sd$status == "ipf_failed", ]
   expect_true(nrow(failed) > 0 && all(is.na(failed$value)))
   expect_true(all(sd$value[sd$status == "ok"] |> is.finite()))
-  s <- cj_scores(d, EPS, max_failure = 0.5)
+  s <- cj_scores(d, EPS, max_failure = 0.5, ccs_gate = NULL)
   expect_true(all(s$n_failed == 4))
   expect_true(all(s$status == "ok_with_failed_draws"))
-  strict <- cj_scores(d, EPS)  # 20% failed > default 1% tolerance
+  strict <- cj_scores(d, EPS, ccs_gate = NULL)  # 20% failed > default 1% tolerance
   expect_true(all(strict$status == "failure_tolerance_exceeded" & is.na(strict$estimate)))
 })
 
 test_that("the three epsilon probabilities sum to one", {
-  s <- cj_scores(cj_example_draws(n_draw = 100), EPS)
+  s <- cj_scores(cj_example_draws(n_draw = 100), EPS, ccs_gate = NULL)
   expect_equal(s$p_positive + s$p_negative + s$p_negligible, rep(1, nrow(s)))
   expect_equal(unique(s$epsilon[s$score == "CPS"]), 0.02)
 })
@@ -73,9 +73,9 @@ test_that("negative effects stay negative and are not clipped", {
 
 test_that("a contrast without control is unavailable with a status, not bare NA", {
   d <- cj_example_draws(n_draw = 10, missing_control = "D1_v1_CD4_CMV")
-  sd <- cj_score_draws(d)
+  sd <- cj_score_draws(d, ccs_gate = NULL)
   expect_true(all(sd$status[sd$contrast_id == "D1_v1_CD4_CMV"] == "unavailable"))
-  s <- cj_scores(d, EPS)
+  s <- cj_scores(d, EPS, ccs_gate = NULL)
   u <- s[s$contrast_id == "D1_v1_CD4_CMV", ]
   expect_true(all(u$status == "unavailable" & is.na(u$estimate)))
   expect_true(all(s$status[s$contrast_id != "D1_v1_CD4_CMV"] == "ok"))
@@ -96,7 +96,7 @@ test_that("cj_fit input adds raw counts to the pattern table", {
 test_that("markers are labelled overlapping and plots build", {
   d <- cj_example_draws(n_draw = 20)
   expect_true(all(cj_markers(d, 0.005)$overlapping))
-  pt <- cj_patterns(d, c("RMS", "CCS"), EPS)
+  pt <- cj_patterns(d, c("RMS", "CCS"), EPS, ccs_gate = NULL)
   expect_s3_class(cj_plot_response_heatmap(pt, "p_positive", score = "RMS"), "ggplot")
   expect_s3_class(cj_plot_response_heatmap(pt, "estimate", score = "CCS"), "ggplot")
   expect_s3_class(cj_plot_contributions(pt, "RMS", "D1_v1_CD4_CMV"), "ggplot")
@@ -139,9 +139,9 @@ test_that("cj_scores emits one experimental-CCS message per call", {
 
 test_that("plots label CCS as experimental", {
   d <- cj_example_draws(n_draw = 20)
-  f <- cj_plot_forest(suppressMessages(cj_scores(d, EPS)), score = c("RMS", "CCS"))
+  f <- cj_plot_forest(suppressMessages(cj_scores(d, EPS, ccs_gate = NULL)), score = c("RMS", "CCS"))
   expect_setequal(unique(f$data$panel), c("RMS", "CCS (experimental)"))
-  pt <- cj_patterns(d, "CCS", EPS)
+  pt <- cj_patterns(d, "CCS", EPS, ccs_gate = NULL)
   expect_equal(cj_plot_contributions(pt)$labels$title, "CCS (experimental)")
   expect_null(cj_plot_contributions(cj_patterns(d, "RMS", EPS))$labels$title)
 })

@@ -1,7 +1,7 @@
 test_that("visit change is the per-draw difference of net scores", {
   d <- cj_example_draws(n_draw = 30)
   vc <- cj_visit_change(d, EPS, "v1", "v2")
-  sd <- cj_score_draws(d)
+  sd <- cj_score_draws(d, ccs_gate = NULL)
   one <- function(id) sd$value[sd$contrast_id == id & sd$score == "CCS"]
   delta <- one("D2_v2_CD4_SEB") - one("D2_v1_CD4_SEB")
   r <- vc$donor[vc$donor$donor_id == "D2" & vc$donor$stimulation == "SEB" &

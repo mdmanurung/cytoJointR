@@ -17,6 +17,71 @@ SCORE_EXPERIMENTAL <- "CCS"
 CCS_NOTE <- "CCS is experimental: not calibrated under donor heterogeneity; see IMPLEMENTATION_STATUS.md"
 score_label <- function(score) ifelse(score %in% SCORE_EXPERIMENTAL, paste0(score, " (experimental)"), score)
 
+# CCS support gate. CCS is reported only when the data determine the baseline dependence: both samples of the
+# contrast hold enough polyfunctional cells, and the control's polyfunctional mass is pinned down by the draws.
+# Defaults calibrated by scripts/55_calibrate-ccs-gate.R (runs/2026-11-03_ccs-gate/); see IMPLEMENTATION_STATUS.md.
+CCS_MIN_POLY_CELLS <- 20L
+CCS_MAX_CV <- 0.5
+CCS_GATE_DEFAULT <- list(min_poly_cells = CCS_MIN_POLY_CELLS, max_cv = CCS_MAX_CV)
+
+check_ccs_gate <- function(gate) {
+  if (is.null(gate)) return(invisible(gate))
+  ok <- is.list(gate) && setequal(names(gate), names(CCS_GATE_DEFAULT)) &&
+    all(vapply(gate, function(v) is.numeric(v) && length(v) == 1L && !is.na(v) && v >= 0, NA))
+  if (!ok)
+    stop("ccs_gate must be NULL or a list with nonnegative numbers `min_poly_cells` and `max_cv`",
+         call. = FALSE)
+  invisible(gate)
+}
+
+# One row per contrast: `status` ("not_estimable", "support_unknown" or NA when CCS is reportable or the
+# contrast has no control) and `reason`. NULL when the gate is off. Counts need a cj_fit; draws alone give
+# "support_unknown".
+ccs_gate_table <- function(x, d, gate) {
+  if (is.null(gate)) return(NULL)
+  ct <- d$contrasts
+  u_row <- match(ct$control_sample_id, d$samples$sample_id)
+  s_row <- match(ct$stim_sample_id, d$samples$sample_id)
+  poly <- rowSums(d$bits) >= 2L
+  out <- data.frame(contrast_id = ct$contrast_id, status = NA_character_, reason = NA_character_)
+  if (!inherits(x, "cj_fit")) {
+    out$status[!is.na(u_row)] <- "support_unknown"
+    out$reason[!is.na(u_row)] <- "polyfunctional cell counts need a cj_fit; cj_draws has no counts"
+    return(out)
+  }
+  cells <- rowSums(x$data$counts[d$samples$sample_id, poly, drop = FALSE])  # by sample row of d$p
+  for (i in which(!is.na(u_row))) {
+    mass <- rowSums(matrix(d$p[, u_row[i], poly], dim(d$p)[1L]))
+    cv <- stats::sd(mass) / mean(mass)
+    why <- c(
+      if (cells[[u_row[i]]] < gate$min_poly_cells)
+        sprintf("control polyfunctional cells %d < %g", cells[[u_row[i]]], gate$min_poly_cells),
+      if (cells[[s_row[i]]] < gate$min_poly_cells)
+        sprintf("stimulated polyfunctional cells %d < %g", cells[[s_row[i]]], gate$min_poly_cells),
+      if (is.na(cv) || cv > gate$max_cv)
+        sprintf("control polyfunctional mass CV %.2g > %g", cv, gate$max_cv))
+    if (length(why)) {
+      out$status[i] <- "not_estimable"
+      out$reason[i] <- paste(why, collapse = "; ")
+    }
+  }
+  out
+}
+
+# Apply the gate table to the CCS rows of a score table: status and reason are set and the value columns blanked.
+# Adds `reason` (NA when nothing is withheld). Rows are never dropped.
+apply_ccs_gate <- function(out, tab, value_cols) {
+  out$reason <- NA_character_
+  if (is.null(tab)) return(out)
+  i <- match(out$contrast_id, tab$contrast_id)
+  hit <- out$score == "CCS" & !is.na(tab$status[i])
+  out$status[hit] <- tab$status[i][hit]
+  out$reason[hit] <- tab$reason[i][hit]
+  v <- intersect(value_cols, names(out))
+  out[hit, v] <- NA_real_
+  out
+}
+
 # Accept a cj_draws or a cj_fit; return the cj_draws.
 as_draws <- function(x) {
   if (inherits(x, "cj_fit")) return(x$draws)
@@ -166,9 +231,30 @@ contrast_keys <- function(ct) {
 #' (or `"score_failed"`) and `value` `NA`; it is never dropped. A contrast with
 #' no control sample gets rows with `status` `"unavailable"`.
 #'
+#' @section CCS support gate:
+#' CCS is reported only when the data determine the baseline dependence it
+#' measures. Per-donor CCS is not identifiable at rare-response sparsity: the
+#' counterfactual (IPF) amplifies the control's polyfunctional mass, and with
+#' few polyfunctional cells the prior sets that mass. A contrast passes when
+#' (1) the control and the stimulated sample each hold at least
+#' `min_poly_cells` observed polyfunctional cells (degree 2 or more), and
+#' (2) the posterior coefficient of variation (SD over mean) of the control's
+#' polyfunctional mass is at most `max_cv`. Counts come from `x$data` when `x`
+#' is a `cj_fit`. A `cj_draws` has no counts, so its CCS rows get `status`
+#' `"support_unknown"`.
+#'
+#' A contrast that fails keeps its CCS rows with `status` `"not_estimable"`,
+#' a `reason` (for example `"control polyfunctional cells 0 < 20"`) and
+#' `NA` values. Rows are never dropped. `experimental` stays `TRUE`: a CCS that
+#' passes is still not calibrated under every donor heterogeneity. The defaults,
+#' `min_poly_cells = 20` and `max_cv = 0.5`, come from
+#' `scripts/55_calibrate-ccs-gate.R` in the reproducibility repository.
+#'
 #' @param x A `cj_draws` or `cj_fit`.
+#' @param ccs_gate The CCS support gate, a list with `min_poly_cells` and
+#'   `max_cv`, or `NULL` to switch it off. See the section "CCS support gate".
 #' @return A data frame with columns `draw_id`, `contrast_id`, `score`,
-#'   `marker` (only for `marker_magnitude`), `value`, `status`, `experimental`.
+#'   `marker` (only for `marker_magnitude`), `value`, `status`, `reason`, `experimental`.
 #'   Scores are `RMS`, `poly_absolute`, `poly_marginal`, `CPS`, `CCS`, `breadth` and
 #'   `marker_magnitude`. Values are signed and never clipped. `experimental` is
 #'   `TRUE` for `CCS`, which is not calibrated under donor heterogeneity.
@@ -176,7 +262,8 @@ contrast_keys <- function(ct) {
 #' @examples
 #' d <- cj_example_draws(n_draw = 20)
 #' head(cj_score_draws(d))
-cj_score_draws <- function(x) {
+cj_score_draws <- function(x, ccs_gate = CCS_GATE_DEFAULT) {
+  check_ccs_gate(ccs_gate)
   d <- as_draws(x)
   eng <- score_engine(d)
   nd <- dim(d$p)[1]
@@ -191,7 +278,7 @@ cj_score_draws <- function(x) {
       status = if (e$available) rep(e$status, times = n) else "unavailable")
   }))
   out$experimental <- out$score %in% SCORE_EXPERIMENTAL
-  out
+  apply_ccs_gate(out, ccs_gate_table(x, d, ccs_gate), "value")
 }
 
 # Summarise the columns of G (draws x scores) into one row per column.
@@ -234,11 +321,14 @@ summarise_columns <- function(cols, G, bad, eps, level, max_failure) {
 #' @param max_failure Largest tolerated fraction of failed draws per contrast.
 #'   Above it the summary is withheld and `status` says so. Failed draws are
 #'   counted in `n_failed` and `failure_fraction`, never hidden.
+#' @param ccs_gate The CCS support gate, a list with `min_poly_cells` and
+#'   `max_cv`, or `NULL` to switch it off. See [cj_score_draws()].
 #' @return A data frame, one row per contrast, score and marker, with
 #'   `estimate`, `lower`, `upper`, `epsilon`, `p_positive`, `p_negative`,
 #'   `p_negligible`, `n_draws`, `n_failed`, `failure_fraction`, `status`
 #'   (`ok`, `ok_with_failed_draws`, `failure_tolerance_exceeded`,
-#'   `unavailable`), `units` and `experimental`. `experimental` is `TRUE` for
+#'   `unavailable`, `not_estimable`, `support_unknown`), `reason` (why the CCS
+#'   gate withheld the row, else `NA`), `units` and `experimental`. `experimental` is `TRUE` for
 #'   `CCS`, and a call that returns `CCS` rows emits one message saying so:
 #'   CCS is not calibrated under donor heterogeneity (see
 #'   `IMPLEMENTATION_STATUS.md`). Silence it with [suppressMessages()].
@@ -248,7 +338,8 @@ summarise_columns <- function(cols, G, bad, eps, level, max_failure) {
 #' eps <- c(RMS = 0.005, poly_absolute = 0.005, poly_marginal = 0.005, CPS = 0.02,
 #'          CCS = 0.005, breadth = 0.05, marker_magnitude = 0.005)
 #' head(cj_scores(d, eps))
-cj_scores <- function(x, epsilon, level = 0.9, max_failure = 0.01) {
+cj_scores <- function(x, epsilon, level = 0.9, max_failure = 0.01, ccs_gate = CCS_GATE_DEFAULT) {
+  check_ccs_gate(ccs_gate)
   d <- as_draws(x)
   check_epsilon(epsilon, c(GLOBAL_SCORES, "marker_magnitude"))
   eng <- score_engine(d)
@@ -262,7 +353,8 @@ cj_scores <- function(x, epsilon, level = 0.9, max_failure = 0.01) {
   }))
   out$experimental <- out$score %in% SCORE_EXPERIMENTAL
   if (any(out$experimental)) message(CCS_NOTE)
-  out
+  apply_ccs_gate(out, ccs_gate_table(x, d, ccs_gate),
+                 c("estimate", "lower", "upper", "p_positive", "p_negative", "p_negligible"))
 }
 
 #' Marker-wise magnitude views (overlapping)
@@ -313,20 +405,23 @@ cj_markers <- function(x, epsilon, level = 0.9, max_failure = 0.01) {
 #' @param epsilon Named numeric vector with one nonnegative entry per `score`.
 #' @param level Probability mass of the credible interval.
 #' @param max_failure As in [cj_scores()].
+#' @param ccs_gate The CCS support gate, as in [cj_scores()]. It acts on the
+#'   `"CCS"` rows only.
 #' @return A data frame, one row per contrast, score and pattern, with the
 #'   full state label `pattern`, `degree`, posterior means `p_U_mean` and
 #'   `p_S_mean`, `estimate`, `lower`, `upper`, the epsilon probabilities and
-#'   `status` and `experimental` (`TRUE` for `CCS`, which is not calibrated under
-#'   donor heterogeneity). For a `cj_fit` it also has the raw counts `n_U`, `n_S`
+#'   `status`, `reason` (as in [cj_scores()]) and `experimental` (`TRUE` for `CCS`,
+#'   which is not calibrated under donor heterogeneity). For a `cj_fit` it also has the raw counts `n_U`, `n_S`
 #'   and the parent totals `N_U`, `N_S`.
 #' @export
 #' @examples
 #' pt <- cj_patterns(cj_example_draws(n_draw = 50), "RMS", c(RMS = 0.005))
 #' head(pt)
 cj_patterns <- function(x, score = c("RMS", "CPS", "CCS"), epsilon, level = 0.9,
-                        max_failure = 0.01) {
+                        max_failure = 0.01, ccs_gate = CCS_GATE_DEFAULT) {
   score <- match.arg(score, several.ok = TRUE)
   check_epsilon(epsilon, score)
+  check_ccs_gate(ccs_gate)
   d <- as_draws(x)
   eng <- score_engine(d, keep_patterns = TRUE)
   keys <- contrast_keys(d$contrasts)
@@ -365,6 +460,8 @@ cj_patterns <- function(x, score = c("RMS", "CPS", "CCS"), epsilon, level = 0.9,
   }))
   if (!inherits(x, "cj_fit")) out[c("n_U", "n_S", "N_U", "N_S")] <- NULL
   out$experimental <- out$score %in% SCORE_EXPERIMENTAL
+  out <- apply_ccs_gate(out, if ("CCS" %in% score) ccs_gate_table(x, d, ccs_gate),
+                        c("estimate", "lower", "upper", "p_positive", "p_negative", "p_negligible"))
   out[order(out$contrast_id, out$score, out$degree, out$pattern), ]
 }
 

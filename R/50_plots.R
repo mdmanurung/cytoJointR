@@ -30,7 +30,9 @@ cj_plot_forest <- function(scores, score = c("RMS", "poly_absolute", "CPS", "CCS
   s$panel <- ifelse(is.na(s$marker), score_label(s$score), paste0(s$score, ": ", s$marker))
   n_na <- length(unique(s$contrast_id[s$status == "unavailable"]))
   n_fail <- length(unique(s$contrast_id[s$status == "failure_tolerance_exceeded"]))
-  s <- s[!s$status %in% c("unavailable", "failure_tolerance_exceeded") & !is.na(s$estimate), ]
+  n_gate <- length(unique(s$contrast_id[s$status %in% c("not_estimable", "support_unknown")]))
+  s <- s[!s$status %in% c("unavailable", "failure_tolerance_exceeded", "not_estimable", "support_unknown") &
+           !is.na(s$estimate), ]
   ggplot2::ggplot(s, ggplot2::aes(x = .data$estimate, y = .data$contrast_id)) +
     ggplot2::geom_vline(xintercept = 0, colour = "grey40") +
     ggplot2::geom_vline(ggplot2::aes(xintercept = .data$epsilon), linetype = "dashed",
@@ -43,7 +45,8 @@ cj_plot_forest <- function(scores, score = c("RMS", "poly_absolute", "CPS", "CCS
     ggplot2::facet_wrap(~ panel, scales = "free_x") +
     ggplot2::labs(x = "net score (posterior mean and credible interval)", y = NULL,
                   caption = paste0("Not shown: unavailable (no control sample) ", n_na,
-                                   "; failed-draw tolerance exceeded ", n_fail))
+                                   "; failed-draw tolerance exceeded ", n_fail,
+                                   if (n_gate) paste0("; CCS withheld by the support gate ", n_gate)))
 }
 
 # Shared prep for the two pattern plots: one contrast per column label.

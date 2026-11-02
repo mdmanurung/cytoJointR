@@ -9,7 +9,8 @@ cj_patterns(
   score = c("RMS", "CPS", "CCS"),
   epsilon,
   level = 0.9,
-  max_failure = 0.01
+  max_failure = 0.01,
+  ccs_gate = CCS_GATE_DEFAULT
 )
 }
 \arguments{
@@ -22,13 +23,16 @@ cj_patterns(
 \item{level}{Probability mass of the credible interval.}
 
 \item{max_failure}{As in \code{\link[=cj_scores]{cj_scores()}}.}
+
+\item{ccs_gate}{The CCS support gate, as in \code{\link[=cj_scores]{cj_scores()}}. It acts on the
+\code{"CCS"} rows only.}
 }
 \value{
 A data frame, one row per contrast, score and pattern, with the
 full state label \code{pattern}, \code{degree}, posterior means \code{p_U_mean} and
 \code{p_S_mean}, \code{estimate}, \code{lower}, \code{upper}, the epsilon probabilities and
-\code{status} and \code{experimental} (\code{TRUE} for \code{CCS}, which is not calibrated under
-donor heterogeneity). For a \code{cj_fit} it also has the raw counts \code{n_U}, \code{n_S}
+\code{status}, \code{reason} (as in \code{\link[=cj_scores]{cj_scores()}}) and \code{experimental} (\code{TRUE} for \code{CCS},
+which is not calibrated under donor heterogeneity). For a \code{cj_fit} it also has the raw counts \code{n_U}, \code{n_S}
 and the parent totals \code{N_U}, \code{N_S}.
 }
 \description{

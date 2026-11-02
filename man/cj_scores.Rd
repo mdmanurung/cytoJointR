@@ -4,7 +4,13 @@
 \alias{cj_scores}
 \title{Signed score summaries per contrast}
 \usage{
-cj_scores(x, epsilon, level = 0.9, max_failure = 0.01)
+cj_scores(
+  x,
+  epsilon,
+  level = 0.9,
+  max_failure = 0.01,
+  ccs_gate = CCS_GATE_DEFAULT
+)
 }
 \arguments{
 \item{x}{A \code{cj_draws} or \code{cj_fit}.}
@@ -18,13 +24,17 @@ cj_scores(x, epsilon, level = 0.9, max_failure = 0.01)
 \item{max_failure}{Largest tolerated fraction of failed draws per contrast.
 Above it the summary is withheld and \code{status} says so. Failed draws are
 counted in \code{n_failed} and \code{failure_fraction}, never hidden.}
+
+\item{ccs_gate}{The CCS support gate, a list with \code{min_poly_cells} and
+\code{max_cv}, or \code{NULL} to switch it off. See \code{\link[=cj_score_draws]{cj_score_draws()}}.}
 }
 \value{
 A data frame, one row per contrast, score and marker, with
 \code{estimate}, \code{lower}, \code{upper}, \code{epsilon}, \code{p_positive}, \code{p_negative},
 \code{p_negligible}, \code{n_draws}, \code{n_failed}, \code{failure_fraction}, \code{status}
 (\code{ok}, \code{ok_with_failed_draws}, \code{failure_tolerance_exceeded},
-\code{unavailable}), \code{units} and \code{experimental}. \code{experimental} is \code{TRUE} for
+\code{unavailable}, \code{not_estimable}, \code{support_unknown}), \code{reason} (why the CCS
+gate withheld the row, else \code{NA}), \code{units} and \code{experimental}. \code{experimental} is \code{TRUE} for
 \code{CCS}, and a call that returns \code{CCS} rows emits one message saying so:
 CCS is not calibrated under donor heterogeneity (see
 \code{IMPLEMENTATION_STATUS.md}). Silence it with \code{\link[=suppressMessages]{suppressMessages()}}.

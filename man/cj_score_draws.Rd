@@ -4,14 +4,17 @@
 \alias{cj_score_draws}
 \title{Per-draw net scores for every contrast}
 \usage{
-cj_score_draws(x)
+cj_score_draws(x, ccs_gate = CCS_GATE_DEFAULT)
 }
 \arguments{
 \item{x}{A \code{cj_draws} or \code{cj_fit}.}
+
+\item{ccs_gate}{The CCS support gate, a list with \code{min_poly_cells} and
+\code{max_cv}, or \code{NULL} to switch it off. See the section "CCS support gate".}
 }
 \value{
 A data frame with columns \code{draw_id}, \code{contrast_id}, \code{score},
-\code{marker} (only for \code{marker_magnitude}), \code{value}, \code{status}, \code{experimental}.
+\code{marker} (only for \code{marker_magnitude}), \code{value}, \code{status}, \code{reason}, \code{experimental}.
 Scores are \code{RMS}, \code{poly_absolute}, \code{poly_marginal}, \code{CPS}, \code{CCS}, \code{breadth} and
 \code{marker_magnitude}. Values are signed and never clipped. \code{experimental} is
 \code{TRUE} for \code{CCS}, which is not calibrated under donor heterogeneity.
@@ -27,6 +30,27 @@ A draw whose computation fails is kept as a row with \code{status} \code{"ipf_fa
 (or \code{"score_failed"}) and \code{value} \code{NA}; it is never dropped. A contrast with
 no control sample gets rows with \code{status} \code{"unavailable"}.
 }
+\section{CCS support gate}{
+
+CCS is reported only when the data determine the baseline dependence it
+measures. Per-donor CCS is not identifiable at rare-response sparsity: the
+counterfactual (IPF) amplifies the control's polyfunctional mass, and with
+few polyfunctional cells the prior sets that mass. A contrast passes when
+(1) the control and the stimulated sample each hold at least
+\code{min_poly_cells} observed polyfunctional cells (degree 2 or more), and
+(2) the posterior coefficient of variation (SD over mean) of the control's
+polyfunctional mass is at most \code{max_cv}. Counts come from \code{x$data} when \code{x}
+is a \code{cj_fit}. A \code{cj_draws} has no counts, so its CCS rows get \code{status}
+\code{"support_unknown"}.
+
+A contrast that fails keeps its CCS rows with \code{status} \code{"not_estimable"},
+a \code{reason} (for example \code{"control polyfunctional cells 0 < 20"}) and
+\code{NA} values. Rows are never dropped. \code{experimental} stays \code{TRUE}: a CCS that
+passes is still not calibrated under every donor heterogeneity. The defaults,
+\code{min_poly_cells = 20} and \code{max_cv = 0.5}, come from
+\verb{scripts/55_calibrate-ccs-gate.R} in the reproducibility repository.
+}
+
 \examples{
 d <- cj_example_draws(n_draw = 20)
 head(cj_score_draws(d))

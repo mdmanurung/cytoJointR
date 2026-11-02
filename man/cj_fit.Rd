@@ -6,6 +6,7 @@
 \usage{
 cj_fit(
   x,
+  model = c("m1dm", "m1"),
   chains = 4L,
   iter_warmup = 1000L,
   iter_sampling = 1000L,
@@ -14,16 +15,21 @@ cj_fit(
   donor_visit = TRUE,
   donor_effects = TRUE,
   centered = FALSE,
+  level = c("sample", "structured"),
   ...
 )
 }
 \arguments{
 \item{x}{A \code{cj_data} object.}
 
+\item{model}{\code{"m1dm"} (Dirichlet-multinomial sample residual) or \code{"m1"} (exact
+multinomial; draws are identical to the version before \code{"m1dm"} existed).}
+
 \item{chains, iter_warmup, iter_sampling, seed}{Passed to CmdStan.}
 
 \item{priors}{Named list that overrides \code{\link[=cj_default_priors]{cj_default_priors()}}. The defaults are
-illustrative smoke-test values, not validated.}
+illustrative smoke-test values, not validated, except \code{inv_phi_sd}, which comes
+from a prior-predictive check (see \code{?cj_default_priors}).}
 
 \item{donor_visit}{Include the donor-by-visit deviation \code{u_iv} (set \code{FALSE} for
 the ablation). Ignored, with a message, when the data hold one visit.}
@@ -41,6 +47,8 @@ null and dependence-only truths (no donor variation in the induced effect) gave
 R-hat up to 1.4 and bulk ESS below 30, and fitting \code{donor_visit = TRUE} to data
 without donor-by-visit variation gave R-hat 1.23. \code{FALSE} (default) is the safe
 choice; use \code{TRUE} only as a speed option when donor variation is clearly present.}
+
+\item{level}{Which probabilities go in \code{fit$draws}: \code{"sample"} or \code{"structured"}.}
 
 \item{...}{Passed to the CmdStanModel \verb{$sample()} method (for example
 \code{adapt_delta}). Defaults: \code{refresh = 0}, \code{parallel_chains = min(chains, 4)},
@@ -60,6 +68,19 @@ by HMC in Stan. Marker \code{j} has natural parameter
 with LKJ(2) correlation; \code{u_iv} is a donor-by-visit basal deviation. All effects
 have unit loadings across markers and are noncentered. A stimulated sample
 enters the likelihood even when its visit has no control sample.
+}
+\details{
+\code{model = "m1dm"} (default) adds a sample-level residual: counts are
+Dirichlet-multinomial, \code{y_s ~ DM(phi * mu_s)} with \code{mu_s = softmax(eta_s)} and
+\code{inv_phi = 1 / phi ~ half-normal(0, inv_phi_sd)}. As \code{inv_phi -> 0} this is
+\code{model = "m1"}, the multinomial model with no sample residual. The default may
+change once the model comparison is decided.
+
+Two kinds of probability are available. \code{level = "sample"} (default) returns the
+realised sample probabilities \code{p_s | y_s ~ Dirichlet(phi * mu_s + y_s)} in
+\code{fit$draws}. \code{level = "structured"} returns \code{mu_s} there. Both are always kept:
+\code{fit$draws_sample} and \code{fit$draws_structured}, and \code{fit$draws} points at the one
+you chose. For \code{model = "m1"} they are identical.
 }
 \examples{
 \donttest{

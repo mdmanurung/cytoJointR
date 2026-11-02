@@ -10,6 +10,7 @@ cj_prior_predict(
   priors = list(),
   donor_effects = TRUE,
   donor_visit = TRUE,
+  model = c("m1dm", "m1"),
   seed = 1L
 )
 }
@@ -24,6 +25,10 @@ cj_prior_predict(
 
 \item{donor_visit}{Include the donor-by-visit basal deviation \code{u_iv}. Switched
 off with a message when the data hold a single visit.}
+
+\item{model}{\code{"m1dm"} also draws \code{inv_phi} from its prior and returns
+sample-level probabilities \code{p_s ~ Dirichlet(phi * mu_s)}; \code{"m1"} returns the
+structured \code{mu_s}, as before. The draws of \code{inv_phi} are in \code{meta$inv_phi}.}
 
 \item{seed}{Integer seed.}
 }

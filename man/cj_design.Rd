@@ -4,7 +4,13 @@
 \alias{cj_design}
 \title{Design matrices and parameter map of the M1 count model}
 \usage{
-cj_design(x, donor_effects = TRUE, donor_visit = TRUE, centered = FALSE)
+cj_design(
+  x,
+  donor_effects = TRUE,
+  donor_visit = TRUE,
+  centered = FALSE,
+  overdispersed = FALSE
+)
 }
 \arguments{
 \item{x}{A \code{cj_data} object.}
@@ -16,6 +22,9 @@ off with a message when the data hold a single visit.}
 
 \item{centered}{Sample donor effects on their natural scale instead of the
 noncentered (standardised) scale. See \code{\link[=cj_fit]{cj_fit()}}.}
+
+\item{overdispersed}{Add the Dirichlet-multinomial sample residual (\code{inv_phi},
+\code{phi} in \code{param_map}). \code{cj_fit()} sets it from its \code{model} argument.}
 }
 \value{
 A list of class \code{cj_design}: matrices \code{X}, \code{Xs}, \code{W}, \code{B}, \code{Bpair},

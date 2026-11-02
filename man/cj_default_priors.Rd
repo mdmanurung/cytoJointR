@@ -12,7 +12,9 @@ through the independence rule \code{alpha0 = logit(1 - (1 - q0)^(1/J))}, an
 initialisation aid only), \code{alpha_mean} (\code{NULL} or a length-J vector that
 overrides it), \code{alpha_sd}, \code{beta_sd} (stimulation main effects), \code{visit_sd},
 \code{visit_stim_sd}, \code{theta0_sd}, \code{delta_sd}, \code{donor_sd} (half-normal scale of
-\code{tau}), \code{tau_u_sd} (half-normal scale of \code{tau_u}), \code{lkj_eta}.
+\code{tau}), \code{tau_u_sd} (half-normal scale of \code{tau_u}), \code{lkj_eta}, \code{inv_phi_sd}
+(half-normal scale of \code{inv_phi = 1 / phi}, the Dirichlet-multinomial
+precision's inverse; see \code{\link[=cj_fit]{cj_fit()}}).
 }
 \description{
 The values come from the bundle's \code{priors.example.json}. That file is marked
@@ -20,4 +22,12 @@ The values come from the bundle's \code{priors.example.json}. That file is marke
 not validated defaults. Check them with \code{\link[=cj_prior_predict]{cj_prior_predict()}} on your assay
 before you trust a fit. \code{visit_sd}, \code{visit_stim_sd} and \code{tau_u_sd} are not in the
 file; they are placeholders of the same kind.
+}
+\details{
+\code{inv_phi_sd = 0.05} is not a smoke value. Under half-normal(0, 0.05) on
+\code{inv_phi}, phi has 5\%, 50\% and 95\% quantiles 10, 30 and 330, and the density
+at \code{inv_phi = 0.02} (phi = 50, strong overdispersion at N = 10 000) is 92\% of
+its maximum. The density at \code{inv_phi = 1e-5} (phi = 1e5, near-multinomial) is
+flat at the maximum, so the data decide that end. A scale of 0.01 pulls the
+prior median to phi = 150; 0.2 puts 32\% of the prior below phi = 5.
 }

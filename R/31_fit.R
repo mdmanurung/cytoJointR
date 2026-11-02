@@ -1,5 +1,7 @@
 # Fit the M1 count model with cmdstanr and wrap the result in cj_fit.
 
+# The executable is named by the hash of the Stan file, so a worktree with a different
+# m1.stan never overwrites the executable another checkout is using.
 # Parallel test workers share the cache, so nobody compiles into it directly:
 # build in a per-process temp dir, copy beside the target, then rename into place.
 # ponytail: rename is atomic only within one filesystem, and NFS semantics apply
@@ -8,13 +10,13 @@ m1_compile <- function() {
   stan <- system.file("stan", "m1.stan", package = "cytoJointR")
   dir <- tools::R_user_dir("cytoJointR", "cache")
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
-  exe <- file.path(dir, "m1")
-  if (!file.exists(exe) || file.mtime(exe) <= file.mtime(stan)) {
+  exe <- file.path(dir, paste0("m1_", substr(unname(tools::md5sum(stan)), 1, 12)))
+  if (!file.exists(exe)) {
     build <- tempfile("m1_build_")
     dir.create(build)
     on.exit(unlink(build, recursive = TRUE))
     built <- cmdstanr::cmdstan_model(stan, dir = build)
-    staged <- tempfile("m1_", dir)
+    staged <- tempfile("m1_stage_", dir)
     stopifnot(file.copy(built$exe_file(), staged), file.rename(staged, exe))
   }
   cmdstanr::cmdstan_model(stan, exe_file = exe, compile = FALSE)
@@ -30,7 +32,8 @@ m1_stan_data <- function(d, counts, pr) {
        Bt = unname(t(d$B)), Bpt = unname(t(d$Bpair)),
        alpha_mean = pr$alpha_mean, alpha_sd = pr$alpha_sd, gamma_sd = pr$gamma_sd,
        theta0_sd = pr$theta0_sd, delta_sd = pr$delta_sd, tau_sd = pr$donor_sd,
-       tau_u_sd = pr$tau_u_sd, lkj_eta = pr$lkj_eta)
+       overdispersed = d$overdispersed, tau_u_sd = pr$tau_u_sd, lkj_eta = pr$lkj_eta,
+       inv_phi_sd = pr$inv_phi_sd)
 }
 
 #' Fit the M1 count model
@@ -43,10 +46,26 @@ m1_stan_data <- function(d, counts, pr) {
 #' have unit loadings across markers and are noncentered. A stimulated sample
 #' enters the likelihood even when its visit has no control sample.
 #'
+#' `model = "m1dm"` (default) adds a sample-level residual: counts are
+#' Dirichlet-multinomial, `y_s ~ DM(phi * mu_s)` with `mu_s = softmax(eta_s)` and
+#' `inv_phi = 1 / phi ~ half-normal(0, inv_phi_sd)`. As `inv_phi -> 0` this is
+#' `model = "m1"`, the multinomial model with no sample residual. The default may
+#' change once the model comparison is decided.
+#'
+#' Two kinds of probability are available. `level = "sample"` (default) returns the
+#' realised sample probabilities `p_s | y_s ~ Dirichlet(phi * mu_s + y_s)` in
+#' `fit$draws`. `level = "structured"` returns `mu_s` there. Both are always kept:
+#' `fit$draws_sample` and `fit$draws_structured`, and `fit$draws` points at the one
+#' you chose. For `model = "m1"` they are identical.
+#'
 #' @param x A `cj_data` object.
+#' @param model `"m1dm"` (Dirichlet-multinomial sample residual) or `"m1"` (exact
+#'   multinomial; draws are identical to the version before `"m1dm"` existed).
+#' @param level Which probabilities go in `fit$draws`: `"sample"` or `"structured"`.
 #' @param chains,iter_warmup,iter_sampling,seed Passed to CmdStan.
 #' @param priors Named list that overrides [cj_default_priors()]. The defaults are
-#'   illustrative smoke-test values, not validated.
+#'   illustrative smoke-test values, not validated, except `inv_phi_sd`, which comes
+#'   from a prior-predictive check (see `?cj_default_priors`).
 #' @param donor_visit Include the donor-by-visit deviation `u_iv` (set `FALSE` for
 #'   the ablation). Ignored, with a message, when the data hold one visit.
 #' @param donor_effects Include donor effects `(b_i, r_im)`; `FALSE` gives a
@@ -75,10 +94,13 @@ m1_stan_data <- function(d, counts, pr) {
 #' summary(fit)
 #' }
 #' @export
-cj_fit <- function(x, chains = 4L, iter_warmup = 1000L, iter_sampling = 1000L, seed = 1L,
-                   priors = list(), donor_visit = TRUE, donor_effects = TRUE, centered = FALSE, ...) {
+cj_fit <- function(x, model = c("m1dm", "m1"), chains = 4L, iter_warmup = 1000L,
+                   iter_sampling = 1000L, seed = 1L, priors = list(), donor_visit = TRUE,
+                   donor_effects = TRUE, centered = FALSE, level = c("sample", "structured"), ...) {
   stopifnot(inherits(x, "cj_data"))
-  d <- cj_design(x, donor_effects, donor_visit, centered)
+  model <- match.arg(model)
+  level <- match.arg(level)
+  d <- cj_design(x, donor_effects, donor_visit, centered, overdispersed = model == "m1dm")
   pr <- cj_resolve_priors(priors, d)
   # cmdstanr names CSVs from the global RNG and the minute, so two fits that start from the
   # same seed collide, and the older fit's finalizer then deletes the newer fit's files.
@@ -92,25 +114,37 @@ cj_fit <- function(x, chains = 4L, iter_warmup = 1000L, iter_sampling = 1000L, s
                            iter_warmup = iter_warmup, iter_sampling = iter_sampling,
                            seed = seed), args))
 
-  pd <- posterior::as_draws_matrix(engine$draws("p"))
-  idx <- do.call(rbind, lapply(regmatches(colnames(pd), gregexpr("[0-9]+", colnames(pd))), as.integer))
-  n <- nrow(pd)
-  p <- array(NA_real_, c(n, nrow(x$counts), ncol(x$counts)),
-             dimnames = list(NULL, rownames(x$counts), colnames(x$counts)))
-  p[cbind(rep(seq_len(n), ncol(pd)), rep(idx[, 1], each = n), rep(idx[, 2], each = n))] <- as.vector(pd)
-  p <- pmax(p, 1e-300)
-  p <- p / as.vector(apply(p, 1:2, sum))   # CSV round-trip leaves ~1e-16 drift
-  draws <- new_cj_draws(p, x$samples, x$contrasts, x$bits,
-                        list(engine_id = "cmdstan-hmc", model_id = "M1", seed = as.integer(seed),
-                             n_draws = n, draw_kind = "in_sample_donor_conditional",
-                             donor_effects = d$use_donor == 1L, donor_visit = d$use_dv == 1L,
-                             centered = d$centered == 1L))
-  new_cj_fit(x, draws, engine, d, pr, m1_diagnostics(engine, d))
+  # Stan variable -> [draw, sample, pattern] array
+  as_array <- function(var) {
+    pd <- posterior::as_draws_matrix(engine$draws(var))
+    idx <- do.call(rbind, lapply(regmatches(colnames(pd), gregexpr("[0-9]+", colnames(pd))), as.integer))
+    n <- nrow(pd)
+    p <- array(NA_real_, c(n, nrow(x$counts), ncol(x$counts)),
+               dimnames = list(NULL, rownames(x$counts), colnames(x$counts)))
+    p[cbind(rep(seq_len(n), ncol(pd)), rep(idx[, 1], each = n), rep(idx[, 2], each = n))] <- as.vector(pd)
+    p <- pmax(p, 1e-300)
+    p / as.vector(apply(p, 1:2, sum))   # CSV round-trip leaves ~1e-16 drift
+  }
+  as_draws <- function(p, kind)
+    new_cj_draws(p, x$samples, x$contrasts, x$bits,
+                 list(engine_id = "cmdstan-hmc", model_id = if (d$overdispersed) "M1-DM" else "M1",
+                      seed = as.integer(seed), n_draws = dim(p)[1], draw_kind = "in_sample_donor_conditional",
+                      level = kind, donor_effects = d$use_donor == 1L, donor_visit = d$use_dv == 1L,
+                      centered = d$centered == 1L))
+  p_sample <- as_array("p")
+  draws_sample <- as_draws(p_sample, "sample")
+  # m1: mu == p exactly, so reuse the draws.
+  draws_structured <- if (d$overdispersed) as_draws(as_array("mu"), "structured") else draws_sample
+  fit <- new_cj_fit(x, if (level == "sample") draws_sample else draws_structured, engine, d, pr,
+                    m1_diagnostics(engine, d))
+  fit$draws_sample <- draws_sample
+  fit$draws_structured <- draws_structured
+  fit
 }
 
 m1_diagnostics <- function(engine, d) {
   ds <- engine$diagnostic_summary(quiet = TRUE)
-  vars <- intersect(c("alpha", "gamma", "theta0", "delta", "tau", "rho", "tau_u"),
+  vars <- intersect(c("alpha", "gamma", "theta0", "delta", "tau", "rho", "tau_u", "inv_phi", "phi"),
                     engine$metadata()$stan_variables)
   tab <- posterior::summarise_draws(engine$draws(vars), "mean", "sd",
                                     ~posterior::quantile2(.x, c(0.05, 0.95)),
@@ -126,7 +160,7 @@ m1_diagnostics <- function(engine, d) {
 #' @export
 print.cj_fit <- function(x, ...) {
   dg <- x$diagnostics
-  cat("<cj_fit> M1 count model,", nrow(x$data$samples), "samples,",
+  cat("<cj_fit>", if (isTRUE(x$design$overdispersed == 1L)) "M1-DM" else "M1", "count model,", nrow(x$data$samples), "samples,",
       length(x$design$donors), "donors,", length(x$design$markers), "markers\n")
   cat("  stimulations:", paste(x$design$stimulations, collapse = ", "),
       "| visits:", paste(x$design$visits, collapse = ", "), "\n")

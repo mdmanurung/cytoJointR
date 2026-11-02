@@ -30,7 +30,10 @@ cj_simulate_counts(
 
 \item{truth}{Named list that overrides the default truth: \code{alpha} (length J),
 \code{gamma} (fixed-effect columns by J, see \code{cj_design()$col_info}), \code{theta0},
-\code{delta} (stimulations by pairs), \code{tau} (length 1 + M), \code{Omega}, \code{tau_u}.}
+\code{delta} (stimulations by pairs), \code{tau} (length 1 + M), \code{Omega}, \code{tau_u}, and
+\code{phi}, the Dirichlet-multinomial precision (default \code{Inf}: plain multinomial
+counts from \code{mu}). With finite \code{phi}, each sample's probabilities are
+\code{p_s ~ Dirichlet(phi * mu_s)} and the counts come from \code{p_s}.}
 
 \item{donor_effects, donor_visit}{Simulate donor effects and donor-by-visit
 deviations (a switched-off effect is absent from the truth).}
@@ -42,8 +45,10 @@ deviations (a switched-off effect is absent from the truth).}
 \value{
 A list: \code{data} (\code{cj_data}), \code{truth} (Stan-scale parameters \code{alpha},
 \code{gamma}, \code{theta0}, \code{delta}, \code{tau}, \code{L_Omega}, \code{z}, \code{tau_u}, \code{u_raw}, plus the
-realised donor effects \code{donor_effect} (\code{b}, \code{r}) and \code{u}), \code{p} (true
-per-sample probabilities, samples by patterns), \code{design}.
+realised donor effects \code{donor_effect} (\code{b}, \code{r}) and \code{u}; \code{inv_phi} when \code{phi}
+is finite), \code{mu} (structured probabilities \code{softmax(eta_s)}, samples by
+patterns), \code{p} (realised sample probabilities the counts came from; equal to
+\code{mu} when \code{phi = Inf}), \code{design}.
 }
 \description{
 Draws data from the model the fit assumes, with known parameters. Each donor

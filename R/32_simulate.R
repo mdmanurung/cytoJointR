@@ -1,4 +1,12 @@
-# Generator A: counts simulated exactly from M1 with known truth.
+# Generator A: counts simulated from M1 with known truth. truth$phi (default Inf)
+# adds the Dirichlet-multinomial sample residual that cj_fit(model = "m1dm") fits.
+
+# One Dirichlet(phi * mu_s) draw per row of mu, floored like m1_softmax().
+m1_dirichlet <- function(mu, phi) {
+  g <- matrix(stats::rgamma(length(mu), shape = phi * mu), nrow(mu), dimnames = dimnames(mu))
+  p <- pmax(g / rowSums(g), 1e-300)
+  p / rowSums(p)
+}
 
 # Truth used when the caller gives none. Values are fixed functions of the
 # index, so a simulation differs between runs only through seed-driven draws.
@@ -32,15 +40,20 @@ m1_default_truth <- function(d) {
 #' @param N Cells per sample.
 #' @param truth Named list that overrides the default truth: `alpha` (length J),
 #'   `gamma` (fixed-effect columns by J, see `cj_design()$col_info`), `theta0`,
-#'   `delta` (stimulations by pairs), `tau` (length 1 + M), `Omega`, `tau_u`.
+#'   `delta` (stimulations by pairs), `tau` (length 1 + M), `Omega`, `tau_u`, and
+#'   `phi`, the Dirichlet-multinomial precision (default `Inf`: plain multinomial
+#'   counts from `mu`). With finite `phi`, each sample's probabilities are
+#'   `p_s ~ Dirichlet(phi * mu_s)` and the counts come from `p_s`.
 #' @param donor_effects,donor_visit Simulate donor effects and donor-by-visit
 #'   deviations (a switched-off effect is absent from the truth).
 #' @param missing_control Fraction of donor-visits whose control sample is dropped.
 #' @param seed Integer seed.
 #' @return A list: `data` (`cj_data`), `truth` (Stan-scale parameters `alpha`,
 #'   `gamma`, `theta0`, `delta`, `tau`, `L_Omega`, `z`, `tau_u`, `u_raw`, plus the
-#'   realised donor effects `donor_effect` (`b`, `r`) and `u`), `p` (true
-#'   per-sample probabilities, samples by patterns), `design`.
+#'   realised donor effects `donor_effect` (`b`, `r`) and `u`; `inv_phi` when `phi`
+#'   is finite), `mu` (structured probabilities `softmax(eta_s)`, samples by
+#'   patterns), `p` (realised sample probabilities the counts came from; equal to
+#'   `mu` when `phi = Inf`), `design`.
 #' @examples
 #' sim <- cj_simulate_counts(n_donors = 4, markers = c("IFNG", "TNF"), seed = 1)
 #' sim$data$samples
@@ -51,6 +64,8 @@ cj_simulate_counts <- function(n_donors = 12L, markers = c("IFNG", "TNF"),
                                truth = list(), donor_effects = TRUE, donor_visit = TRUE,
                                missing_control = 0, seed = 1L) {
   set.seed(seed)
+  phi <- if (is.null(truth$phi)) Inf else truth$phi
+  stopifnot(length(phi) == 1L, phi > 0)
   bits <- cj_bits(markers)
   donors <- sprintf("D%02d", seq_len(n_donors))
   grid <- expand.grid(condition = c(CONTROL_CONDITION, stimulations), visit = visits,
@@ -64,7 +79,7 @@ cj_simulate_counts <- function(n_donors = 12L, markers = c("IFNG", "TNF"),
     sample_id = paste(grid$donor_id, grid$visit, grid$condition, sep = "_"),
     donor_id = grid$donor_id, visit = factor(grid$visit, levels = visits),
     parent_population = "CD4", condition = grid$condition, N = as.numeric(N))
-  d <- m1_design(samples, bits, donor_effects, donor_visit)
+  d <- m1_design(samples, bits, donor_effects, donor_visit, overdispersed = is.finite(phi))
 
   tr <- utils::modifyList(m1_default_truth(d), truth)
   stopifnot(identical(dim(tr$gamma), c(ncol(d$X), length(markers))))
@@ -80,7 +95,8 @@ cj_simulate_counts <- function(n_donors = 12L, markers = c("IFNG", "TNF"),
     par$u_raw <- stats::rnorm(nrow(d$dv))
   }
   par <- m1_zero_donor(par, d)
-  p <- m1_softmax(m1_eta(d, par))
+  mu <- m1_softmax(m1_eta(d, par))
+  p <- if (is.finite(phi)) m1_dirichlet(mu, phi) else mu
   counts <- t(vapply(seq_len(nrow(p)), \(s) stats::rmultinom(1, N, p[s, ])[, 1], integer(nrow(bits))))
   dimnames(counts) <- list(samples$sample_id, pattern_labels(bits))
 
@@ -94,7 +110,9 @@ cj_simulate_counts <- function(n_donors = 12L, markers = c("IFNG", "TNF"),
     dimnames(de) <- list(colnames(d$W), d$donors)
     truth_out$donor_effect <- de
   }
+  if (is.finite(phi)) truth_out$inv_phi <- 1 / phi
   if (d$use_dv) truth_out$u <- setNames(par$tau_u * par$u_raw, paste(d$dv$donor_id, d$dv$visit, sep = "@"))
   dimnames(truth_out$gamma) <- dimnames(tr$gamma)
-  list(data = data, truth = truth_out, p = `dimnames<-`(p, dimnames(counts)), design = d)
+  list(data = data, truth = truth_out, mu = `dimnames<-`(mu, dimnames(counts)),
+       p = `dimnames<-`(p, dimnames(counts)), design = d)
 }

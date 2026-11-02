@@ -10,7 +10,7 @@ skip_if_no_stan <- function() {
 # True parameters under their Stan names, including rho from the truth's correlation.
 truth_key <- function(sim) {
   tr <- sim$truth; d <- sim$design
-  v <- cytoJointR:::m1_stan_vector(tr[c("alpha", "gamma", "theta0", "delta", "tau", "tau_u")], d)
+  v <- cytoJointR:::m1_stan_vector(tr[c("alpha", "gamma", "theta0", "delta", "tau", "tau_u", "inv_phi")], d)
   if (d$use_donor) {
     om <- tr$L_Omega %*% t(tr$L_Omega)
     ab <- utils::combn(nrow(om), 2L)
@@ -38,9 +38,11 @@ expect_recovered <- function(rec) {
   testthat::expect_lte(sum(!rec$in99), allowed)
 }
 
-expect_diagnostics_clean <- function(fit) {
+# max_divergent: a few stray divergences in 4000 draws (0.1%) are tolerated where the
+# donor block alone makes them, e.g. when a donor SD is near zero.
+expect_diagnostics_clean <- function(fit, max_divergent = 0) {
   dg <- fit$diagnostics
-  testthat::expect_equal(dg$n_divergent, 0)
+  testthat::expect_lte(dg$n_divergent, max_divergent)
   testthat::expect_lt(dg$max_rhat, 1.02)
   testthat::expect_gt(dg$min_ess_bulk, 200)
   testthat::expect_gt(min(dg$ebfmi), 0.3)
@@ -58,7 +60,13 @@ loglik_r_vs_stan <- function(sim, seed = 1, centered = FALSE) {
     if (d$use_dv) par$u_raw <- par$tau_u * par$u_raw
   }
   p <- cytoJointR:::m1_softmax(cytoJointR:::m1_eta(d, par))
-  ll_r <- vapply(seq_len(nrow(p)), \(s) cj_log_multinomial(sim$data$counts[s, ], p[s, ]), 0)
+  ll_r <- vapply(seq_len(nrow(p)), \(s) {
+    y <- sim$data$counts[s, ]
+    if (!d$overdispersed) return(cj_log_multinomial(y, p[s, ]))
+    a <- p[s, ] / par$inv_phi   # Dirichlet-multinomial
+    lgamma(sum(a)) + lgamma(sum(y) + 1) - lgamma(sum(y) + sum(a)) +
+      sum(lgamma(y + a) - lgamma(a) - lgamma(y + 1))
+  }, 0)
   v <- cytoJointR:::m1_stan_vector(par, d)
   gq <- cytoJointR:::m1_compile()$generate_quantities(
     fitted_params = posterior::as_draws_matrix(matrix(v, 1, dimnames = list(NULL, names(v)))),

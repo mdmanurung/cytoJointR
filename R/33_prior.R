@@ -8,18 +8,26 @@
 #' before you trust a fit. `visit_sd`, `visit_stim_sd` and `tau_u_sd` are not in the
 #' file; they are placeholders of the same kind.
 #'
+#' `inv_phi_sd = 0.05` is not a smoke value. Under half-normal(0, 0.05) on
+#' `inv_phi`, phi has 5%, 50% and 95% quantiles 10, 30 and 330, and the density
+#' at `inv_phi = 0.02` (phi = 50, strong overdispersion at N = 10 000) is 92% of
+#' its maximum. The density at `inv_phi = 1e-5` (phi = 1e5, near-multinomial) is
+#' flat at the maximum, so the data decide that end. A scale of 0.01 pulls the
+#' prior median to phi = 150; 0.2 puts 32% of the prior below phi = 5.
 #' @return A named list: `baseline_any_positive` (sets the prior mean of `alpha`
 #'   through the independence rule `alpha0 = logit(1 - (1 - q0)^(1/J))`, an
 #'   initialisation aid only), `alpha_mean` (`NULL` or a length-J vector that
 #'   overrides it), `alpha_sd`, `beta_sd` (stimulation main effects), `visit_sd`,
 #'   `visit_stim_sd`, `theta0_sd`, `delta_sd`, `donor_sd` (half-normal scale of
-#'   `tau`), `tau_u_sd` (half-normal scale of `tau_u`), `lkj_eta`.
+#'   `tau`), `tau_u_sd` (half-normal scale of `tau_u`), `lkj_eta`, `inv_phi_sd`
+#'   (half-normal scale of `inv_phi = 1 / phi`, the Dirichlet-multinomial
+#'   precision's inverse; see [cj_fit()]).
 #' @export
 cj_default_priors <- function() {
   structure(list(baseline_any_positive = 0.005, alpha_mean = NULL, alpha_sd = 1,
                  beta_sd = 1.5, visit_sd = 1, visit_stim_sd = 1,
                  theta0_sd = 0.5, delta_sd = 0.3, donor_sd = 0.5, tau_u_sd = 0.5,
-                 lkj_eta = 2),
+                 lkj_eta = 2, inv_phi_sd = 0.05),
             status = "ILLUSTRATIVE_SMOKE_INPUT_NOT_VALIDATED_DEFAULTS")
 }
 
@@ -71,6 +79,7 @@ m1_prior_draw <- function(d, pr) {
     par$tau_u <- abs(stats::rnorm(1, 0, pr$tau_u_sd))
     par$u_raw <- stats::rnorm(nrow(d$dv))
   }
+  if (d$overdispersed) par$inv_phi <- abs(stats::rnorm(1, 0, pr$inv_phi_sd))
   m1_zero_donor(par, d)
 }
 
@@ -86,6 +95,9 @@ m1_prior_draw <- function(d, pr) {
 #' @param n_draws Number of prior draws.
 #' @param priors Named list that overrides [cj_default_priors()].
 #' @inheritParams cj_design
+#' @param model `"m1dm"` also draws `inv_phi` from its prior and returns
+#'   sample-level probabilities `p_s ~ Dirichlet(phi * mu_s)`; `"m1"` returns the
+#'   structured `mu_s`, as before. The draws of `inv_phi` are in `meta$inv_phi`.
 #' @param seed Integer seed.
 #' @return A `cj_draws` object.
 #' @examples
@@ -95,15 +107,24 @@ m1_prior_draw <- function(d, pr) {
 #' quantile(1 - pp$p[, 1, 1], c(0.05, 0.5, 0.95))
 #' @export
 cj_prior_predict <- function(x, n_draws = 200L, priors = list(), donor_effects = TRUE,
-                             donor_visit = TRUE, seed = 1L) {
-  d <- cj_design(x, donor_effects, donor_visit)
+                             donor_visit = TRUE, model = c("m1dm", "m1"), seed = 1L) {
+  model <- match.arg(model)
+  d <- cj_design(x, donor_effects, donor_visit, overdispersed = model == "m1dm")
   pr <- cj_resolve_priors(priors, d)
   set.seed(seed)
-  draws <- lapply(seq_len(n_draws), \(i) m1_softmax(m1_eta(d, m1_prior_draw(d, pr))))
+  inv_phi <- numeric(n_draws)
+  draws <- lapply(seq_len(n_draws), \(i) {
+    par <- m1_prior_draw(d, pr)
+    mu <- m1_softmax(m1_eta(d, par))
+    if (!d$overdispersed) return(mu)
+    inv_phi[i] <<- par$inv_phi
+    m1_dirichlet(mu, 1 / par$inv_phi)
+  })
   p <- aperm(simplify2array(draws), c(3L, 1L, 2L))
   dimnames(p) <- list(NULL, x$samples$sample_id, pattern_labels(x$bits))
   new_cj_draws(p, x$samples, x$contrasts, x$bits,
-               list(engine_id = "prior", model_id = "M1", seed = as.integer(seed),
-                    n_draws = as.integer(n_draws), draw_kind = "in_sample_donor_conditional",
-                    priors = pr))
+               list(engine_id = "prior", model_id = if (d$overdispersed) "M1-DM" else "M1",
+                    seed = as.integer(seed), n_draws = as.integer(n_draws),
+                    draw_kind = "in_sample_donor_conditional", priors = pr,
+                    inv_phi = if (d$overdispersed) inv_phi))
 }

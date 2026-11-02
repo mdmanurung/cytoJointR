@@ -20,15 +20,19 @@
 #'   off with a message when the data hold a single visit.
 #' @param centered Sample donor effects on their natural scale instead of the
 #'   noncentered (standardised) scale. See [cj_fit()].
+#' @param overdispersed Add the Dirichlet-multinomial sample residual (`inv_phi`,
+#'   `phi` in `param_map`). `cj_fit()` sets it from its `model` argument.
 #' @return A list of class `cj_design`: matrices `X`, `Xs`, `W`, `B`, `Bpair`,
 #'   index vectors, flags, `col_info`, `dropped` and `param_map` (Stan name to label).
 #' @export
-cj_design <- function(x, donor_effects = TRUE, donor_visit = TRUE, centered = FALSE) {
+cj_design <- function(x, donor_effects = TRUE, donor_visit = TRUE, centered = FALSE,
+                      overdispersed = FALSE) {
   stopifnot(inherits(x, "cj_data"))
-  m1_design(x$samples, x$bits, donor_effects, donor_visit, centered)
+  m1_design(x$samples, x$bits, donor_effects, donor_visit, centered, overdispersed)
 }
 
-m1_design <- function(samples, bits, donor_effects = TRUE, donor_visit = TRUE, centered = FALSE) {
+m1_design <- function(samples, bits, donor_effects = TRUE, donor_visit = TRUE, centered = FALSE,
+                      overdispersed = FALSE) {
   pops <- unique(as.character(samples$parent_population))
   if (length(pops) > 1L)
     stop("samples hold ", length(pops), " parent populations (", paste(pops, collapse = ", "),
@@ -76,7 +80,7 @@ m1_design <- function(samples, bits, donor_effects = TRUE, donor_visit = TRUE, c
             donors = donors, donor_of = match(as.character(samples$donor_id), donors),
             dv = dv, dv_of = match(dv_key, paste(dv$donor_id, dv$visit, sep = "@")),
             use_donor = as.integer(donor_effects), use_dv = as.integer(donor_visit), centered = as.integer(centered),
-            sample_id = samples$sample_id)
+            overdispersed = as.integer(overdispersed), sample_id = samples$sample_id)
   d$param_map <- m1_param_map(d)
   structure(d, class = "cj_design")
 }
@@ -101,6 +105,8 @@ m1_param_map <- function(d) {
                  label = sprintf("rho[%s, %s]", colnames(d$W)[ab[1, ]], colnames(d$W)[ab[2, ]])))
   }
   if (d$use_dv) map <- rbind(map, data.frame(stan = "tau_u[1]", label = "tau_u"))
+  if (d$overdispersed)
+    map <- rbind(map, data.frame(stan = c("inv_phi[1]", "phi[1]"), label = c("inv_phi", "phi")))
   map
 }
 
@@ -140,7 +146,7 @@ m1_stan_vector <- function(par, d) {
   flat <- function(nm, v) {
     if (!length(v)) return(NULL)
     v <- as.matrix(v)
-    idx <- if (ncol(v) == 1L && nm %in% c("alpha", "theta0", "tau", "tau_u", "u_raw"))
+    idx <- if (ncol(v) == 1L && nm %in% c("alpha", "theta0", "tau", "tau_u", "u_raw", "inv_phi"))
       sprintf("%s[%d]", nm, seq_along(v))
     else {
       g <- expand.grid(i = seq_len(nrow(v)), j = seq_len(ncol(v)))
@@ -150,5 +156,6 @@ m1_stan_vector <- function(par, d) {
   }
   c(flat("alpha", par$alpha), flat("gamma", par$gamma), flat("theta0", par$theta0),
     flat("delta", par$delta), flat("tau", par$tau), flat("L_Omega", par$L_Omega),
-    flat("z", par$z), flat("tau_u", par$tau_u), flat("u_raw", par$u_raw))
+    flat("z", par$z), flat("tau_u", par$tau_u), flat("u_raw", par$u_raw),
+    flat("inv_phi", par$inv_phi))
 }

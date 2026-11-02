@@ -2,6 +2,9 @@
 // eta_sk = sum_j B_kj a_sj + sum_{j<l} B_kj B_kl theta_sjl, p_s = softmax(eta_s).
 // z and u_raw are standardised (noncentered, default) or raw (centered) effects.
 // a_sj  = alpha_j + X_s gamma_j + (donor effect, loading W_s) + (donor x visit effect).
+// overdispersed = 0: y_s ~ multinomial(mu_s), exactly M1.
+// overdispersed = 1: y_s ~ dirichlet_multinomial(phi * mu_s), phi = 1 / inv_phi, so
+//   p_s | y_s ~ Dirichlet(phi * mu_s + y_s) (conjugate) and inv_phi -> 0 recovers M1.
 // theta_s = theta0 + Xs_s delta.   All design matrices are built in R (cj_design()).
 functions {
   matrix DE_of(vector tau, matrix L_Omega, matrix z, int centered) {
@@ -38,6 +41,7 @@ data {
   int<lower=0, upper=1> use_donor;
   int<lower=0, upper=1> use_dv;
   int<lower=0, upper=1> centered;        // 1: z and u_raw are the raw effects
+  int<lower=0, upper=1> overdispersed;   // 1: Dirichlet-multinomial sample residual
   array[S, K] int<lower=0> y;
   matrix[S, Pf] X;
   matrix[S, M] Xs;                       // stimulation indicators
@@ -55,6 +59,7 @@ data {
   real<lower=0> tau_sd;
   real<lower=0> tau_u_sd;
   real<lower=0> lkj_eta;
+  real<lower=0> inv_phi_sd;              // half-normal scale of inv_phi
 }
 transformed data {
   int Dd = use_donor ? 1 + M : 0;
@@ -71,6 +76,7 @@ parameters {
   matrix[Dd, Nz] z;
   vector<lower=0>[use_dv] tau_u;
   vector[Gu] u_raw;
+  vector<lower=0>[overdispersed] inv_phi;
 }
 model {
   alpha ~ normal(alpha_mean, alpha_sd);
@@ -94,18 +100,34 @@ model {
   }
   matrix[S, K] eta = eta_matrix(alpha, gamma, theta0, delta, DE_of(tau, L_Omega, z, centered),
                                 u_of(tau_u, u_raw, centered), X, Xs, W, donor_of, dv_of, Bt, Bpt);
-  for (s in 1:S) y[s] ~ multinomial_logit(eta[s]');
+  if (overdispersed) {
+    inv_phi ~ normal(0, inv_phi_sd);
+    for (s in 1:S) y[s] ~ dirichlet_multinomial(softmax(eta[s]') / inv_phi[1]);
+  } else {
+    for (s in 1:S) y[s] ~ multinomial_logit(eta[s]');
+  }
 }
 generated quantities {
-  array[S] vector[K] p;
+  array[S] vector[K] p;                  // sample-level probabilities
+  array[S] vector[K] mu;                 // structured probabilities softmax(eta_s)
   vector[S] log_lik;
+  vector[overdispersed] phi;
   vector[(Dd * (Dd - 1)) %/% 2] rho;
   {
     matrix[S, K] eta = eta_matrix(alpha, gamma, theta0, delta, DE_of(tau, L_Omega, z, centered),
                                   u_of(tau_u, u_raw, centered), X, Xs, W, donor_of, dv_of, Bt, Bpt);
+    if (overdispersed) phi[1] = 1 / inv_phi[1];
     for (s in 1:S) {
-      p[s] = softmax(eta[s]');
-      log_lik[s] = multinomial_logit_lpmf(y[s] | eta[s]');
+      mu[s] = softmax(eta[s]');
+      if (overdispersed) {
+        // conjugate posterior of p_s; a draw that underflows to nothing falls back to mu_s
+        p[s] = dirichlet_rng(phi[1] * mu[s] + to_vector(y[s]));
+        if (!(sum(p[s]) > 0)) p[s] = mu[s];
+        log_lik[s] = dirichlet_multinomial_lpmf(y[s] | phi[1] * mu[s]);
+      } else {
+        p[s] = mu[s];
+        log_lik[s] = multinomial_logit_lpmf(y[s] | eta[s]');
+      }
     }
     if (Dd > 1) {
       matrix[Dd, Dd] Omega = multiply_lower_tri_self_transpose(L_Omega);

@@ -18,11 +18,11 @@ test_that("a shared control sample gives each contrast the same draw", {
   d$p[, "D1_v1_SEB", ] <- d$p[, "D1_v1_CMV", ]
   sd <- cj_score_draws(d)
   pick <- function(id) sd[sd$contrast_id == id & sd$score == "RMS", "value"]
-  expect_identical(pick("D1_v1_CMV"), pick("D1_v1_SEB"))
+  expect_identical(pick("D1_v1_CD4_CMV"), pick("D1_v1_CD4_SEB"))
   # And the value is the stimulated minus control mass in the SAME draw k.
   pos <- rowSums(d$bits) > 0
   by_hand <- rowSums(d$p[, "D1_v1_CMV", pos]) - rowSums(d$p[, "D1_v1_control", pos])
-  expect_equal(pick("D1_v1_CMV"), unname(by_hand))
+  expect_equal(pick("D1_v1_CD4_CMV"), unname(by_hand))
 })
 
 test_that("an IPF failure is flagged and kept, not dropped", {

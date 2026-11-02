@@ -108,3 +108,14 @@ test_that("cj_patterns works when a score keeps a single pattern (two markers)",
   expect_equal(sum(pt$score == "CPS" & pt$contrast_id == pt$contrast_id[1]), 1L)
   expect_true(all(c("RMS", "CPS", "CCS") %in% pt$score))
 })
+
+test_that("the forest caption counts unavailable and failure-tolerance contrasts separately", {
+  s <- cj_scores(cj_example_draws(n_draw = 20, missing_control = "D1_v1_CD4_CMV"), EPS)
+  hit <- s$contrast_id == "D2_v1_CD4_CMV"            # force a tolerance failure
+  s$status[hit] <- "failure_tolerance_exceeded"
+  s[hit, c("estimate", "lower", "upper")] <- NA
+  pl <- cj_plot_forest(s, "RMS")
+  expect_equal(ggplot2::get_labs(pl)$caption,
+               "Not shown: unavailable (no control sample) 1; failed-draw tolerance exceeded 1")
+  expect_false(any(c("D1_v1_CD4_CMV", "D2_v1_CD4_CMV") %in% pl$data$contrast_id))
+})

@@ -16,8 +16,8 @@ A ggplot object.
 }
 \description{
 One panel per score (and marker). Points are posterior means, bars are
-credible intervals, dashed lines are \code{+-epsilon}. Unavailable contrasts
-are not drawn and are counted in the caption.
+credible intervals, dashed lines are \code{+-epsilon}. Contrasts that are unavailable
+or exceed the failed-draw tolerance are not drawn and are counted in the caption.
 }
 \examples{
 d <- cj_example_draws(n_draw = 50)

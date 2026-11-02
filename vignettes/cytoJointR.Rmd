@@ -136,6 +136,12 @@ model, so its intervals and signs are not calibrated. Score tables carry an
 `experimental` column (`TRUE` for CCS), and `cj_scores()` prints a message
 once per call.
 
+CCS is also gated on support. A contrast reports CCS only when its control and
+stimulated samples each hold enough polyfunctional cells and the control's
+polyfunctional mass is well determined by the data; otherwise the row stays
+with `status = "not_estimable"` and a `reason`, and `ccs_gate = NULL` switches
+the gate off. Draws without counts give `status = "support_unknown"`.
+
 Epsilon is the smallest effect you would call meaningful, in the units of the
 score. You must choose it before looking at the results; there is no default.
 For each score the function returns three probabilities that sum to one:

@@ -12,6 +12,15 @@
 * CCS is experimental: `cj_scores()`, `cj_score_draws()` and `cj_patterns()` add
   a logical `experimental` column (`TRUE` for CCS), `cj_scores()` emits one
   message per call, and plots label it "CCS (experimental)".
+* CCS support gate: `cj_scores()`, `cj_score_draws()` and `cj_patterns()` gain
+  `ccs_gate` (default `list(min_poly_cells = 20, max_cv = 0.5)`; `NULL` switches
+  it off). A contrast keeps its CCS rows but gets `status = "not_estimable"`, a
+  `reason` and `NA` values unless the control and the stimulated sample each hold
+  at least `min_poly_cells` polyfunctional cells and the posterior CV of the
+  control's polyfunctional mass is at most `max_cv`. A `cj_draws` has no counts,
+  so its CCS rows get `status = "support_unknown"`; pass a `cj_fit` or
+  `ccs_gate = NULL`. A `reason` column is added to all three outputs. CCS stays
+  `experimental`. `cj_visit_change()` is not gated.
 * `cj_scores_from_probs(min_functional=)` is deprecated and ignored.
 * RTMB removed from Suggests: Stan via cmdstanr is the only engine in v0.1.
 * Input layer: `cj_from_counts()`, `cj_from_events()`, `cj_from_gatingset()`

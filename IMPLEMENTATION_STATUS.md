@@ -31,6 +31,7 @@ Test files are in `tests/testthat/`.
 | 3 | Donor effects `b_i`, `r_im`, Sigma | DONE | `test-model-r2-donor.R` |
 | 3 | Visits, visit x stimulation, donor x visit deviation and its ablation | DONE | `test-model-r4-visits.R` |
 | 4 | Scores from aligned draws (RMS, poly, CPS, CCS, marker magnitude, patterns) | DONE | `test-scores.R`, `test-score-engine.R`, `test-signed-attribution.R`, `test-counterfactual.R` |
+| 4 | CCS support gate (`ccs_gate`): `not_estimable` with a reason below 20 polyfunctional cells or posterior CV 0.5 of the control's polyfunctional mass | DONE | `test-ccs-gate.R`; thresholds from `scripts/55_calibrate-ccs-gate.R` (`runs/2026-11-03_ccs-gate/`) |
 | 4 | Three-way epsilon probabilities, unavailable contrasts | DONE | `test-scores.R` |
 | 4 | Visit change per donor and at equal donor weights | DONE | `test-visit-change.R` |
 | 4 | Per-donor score draws exported (`cj_score_draws()`) | DONE | `test-scores.R`, `helper-scores-draws.R` |
@@ -172,6 +173,18 @@ pilot's M1 gave RMS coverage 0.23 and CPS 0.07. In the redesign benchmark,
   `experimental` column, one message per `cj_scores()` call, and the
   "(experimental)" plot label. The C0 baseline gives CCS false signs up to
   0.995, so dropping the model is no fix.
+- **CCS support gate:** CCS is withheld (`not_estimable`) below 20
+  polyfunctional cells in the control or the stimulated sample, or above a
+  posterior CV of 0.5 for the control's polyfunctional mass. In the 10-seed
+  calibration (`runs/2026-11-03_ccs-gate/gate_chosen.tsv`, 24 donors, J = 3)
+  no contrast passes in the three sparse regimes, where ungated generator-B
+  coverage is 0.33. In dense regimes (5% any-positive) the gate passes 25% to
+  100% of contrasts, with coverage 0.87 to 0.92 and false signs 0 to 0.013
+  under generator B, and 0.99 to 1.00 (over-coverage) under generator A. Coverage
+  is against the realised sample probabilities; against the structured ones it
+  is 0.27 to 0.48 under B. The count condition decides; the CV condition adds
+  nothing in these regimes and is a backstop. Regimes between the sparse and the
+  dense ones were not simulated.
 - **CPS under `m1dm`** covers 0.98 to 1.00 in generators A and C for a nominal
   0.90, so its intervals are wider than needed. In generator B it covers
   0.81 to 0.84. The cause of the over-coverage is unverified; the Dirichlet

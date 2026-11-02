@@ -11,7 +11,7 @@ Test files are in `tests/testthat/`.
 | Roxygen docs with running examples | DONE | every export has a block; hand-written Rd converted to roxygen |
 | testthat suite, slow Stan tests skipped on CRAN | DONE | `skip_if_no_stan()` in `helper-model.R` |
 | Two vignettes | DONE | `vignettes/cytoJointR.Rmd`, `vignettes/comparison.Rmd` |
-| `R CMD check` 0 errors / 0 warnings | DONE | see the check result in the commit log and report |
+| `R CMD check` 0 errors / 0 warnings | PARTIAL | last run (2026-11-02, host): 0 errors, 1 warning (`qpdf` missing on host), 1 note (dependency check segfaults loading flowWorkspace). One intermittent test error: `test-model-r2-donor.R:35`, missing cmdstanr CSV in a temp dir; the file passes 15/15 on rerun. Cause not established. |
 | NEWS.md, pkgdown config | DONE | `NEWS.md`, `_pkgdown.yml` |
 | GitHub Actions check | NOT_RUN | `.github/workflows/R-CMD-check.yaml` exists; the repository has no remote, so CI has never run |
 | Stan models in `inst/stan/`, compiled by cmdstanr | DONE | `inst/stan/m1.stan`, `test-model-*.R` |

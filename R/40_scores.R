@@ -323,7 +323,7 @@ cj_patterns <- function(x, score = c("RMS", "CPS", "CCS"), epsilon, level = 0.9,
     e <- eng[[i]]
     k <- which(degree >= CONTRIBUTION_MIN_DEGREE[[sc]])
     cols <- labels[k]
-    G <- if (e$available) e$contrib[, k, sc]
+    G <- if (e$available) matrix(e$contrib[, k, sc], dim(e$contrib)[1L])  # keep a matrix when one pattern remains
     cell <- summarise_columns(cols, G, if (e$available) e$status != "ok",
                              rep(epsilon[[sc]], length(cols)), level, max_failure)
     cell$score <- sc

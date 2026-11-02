@@ -101,3 +101,10 @@ test_that("markers are labelled overlapping and plots build", {
   expect_s3_class(cj_plot_response_heatmap(pt, "estimate", score = "CCS"), "ggplot")
   expect_s3_class(cj_plot_contributions(pt, "RMS", "D1_v1_CMV"), "ggplot")
 })
+
+test_that("cj_patterns works when a score keeps a single pattern (two markers)", {
+  d <- cj_example_draws(n_draw = 20, markers = c("IFNG", "TNF"))
+  pt <- cj_patterns(d, c("RMS", "CPS", "CCS"), EPS)
+  expect_equal(sum(pt$score == "CPS" & pt$contrast_id == pt$contrast_id[1]), 1L)
+  expect_true(all(c("RMS", "CPS", "CCS") %in% pt$score))
+})

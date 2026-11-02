@@ -22,7 +22,7 @@ test_that("rung 4 recovers visit effects, interactions, donor scales and tau_u",
   print(rec, digits = 3)
   print(fit)
   expect_diagnostics_clean(fit)
-  expect_true(all(rec$in99))
+  expect_recovered(rec)
   expect_true("tau_u" %in% rec$param)
   expect_equal(dim(fit$draws$p)[2:3], dim(sim$data$counts))
 })

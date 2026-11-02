@@ -17,6 +17,6 @@ test_that("rung 1 recovers fixed effects", {
   expect_equal(fit$draws$meta$draw_kind, "in_sample_donor_conditional")
   expect_identical(dim(fit$draws$p)[2:3], dim(sim$data$counts))
   expect_diagnostics_clean(fit)
-  expect_true(all(rec$in99))
+  expect_recovered(rec)
   expect_lt(fit$diagnostics$time_s, 60)
 })

@@ -11,7 +11,7 @@ test_that("rung 3 recovers two stimulations sharing one control per donor", {
   print(rec, digits = 3)
   print(fit)
   expect_diagnostics_clean(fit)
-  expect_true(all(rec$in99))
+  expect_recovered(rec)
   expect_lt(fit$diagnostics$time_s, 60)
 })
 
@@ -26,5 +26,5 @@ test_that("stimulated samples without a control still enter the fit", {
   expect_equal(dim(fit$draws$p)[2], nrow(sim$data$samples))       # p for every sample
   expect_equal(sum(fit$design$X[, "stim_CMV"]), 20)               # all stimulated rows kept
   expect_diagnostics_clean(fit)
-  expect_true(all(rec$in99))
+  expect_recovered(rec)
 })

@@ -30,6 +30,14 @@ recovery <- function(fit, sim) {
              row.names = NULL)
 }
 
+# A calibrated model misses its 99% interval for 1% of parameters, so "all in 99%"
+# fails 1 - 0.99^n of the time (14% at n = 15). Allow the misses a correct fit
+# exceeds only 0.1% of the time; a real recovery bug misses far more.
+expect_recovered <- function(rec) {
+  allowed <- stats::qbinom(0.999, nrow(rec), 0.01)
+  testthat::expect_lte(sum(!rec$in99), allowed)
+}
+
 expect_diagnostics_clean <- function(fit) {
   dg <- fit$diagnostics
   testthat::expect_equal(dg$n_divergent, 0)

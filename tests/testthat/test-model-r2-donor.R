@@ -16,7 +16,7 @@ test_that("rung 2 recovers fixed effects, donor scales and correlation", {
   print(rec, digits = 3)
   print(fit)
   expect_diagnostics_clean(fit)
-  expect_true(all(rec$in99))
+  expect_recovered(rec)
   expect_lt(fit$diagnostics$time_s, 60)
 
   # shrunken donor effects track the realised ones
@@ -37,7 +37,7 @@ test_that("the centered parameterisation gives the same likelihood and recovery"
   print(rec[7:9, ], digits = 3)
   print(fit)
   expect_diagnostics_clean(fit)
-  expect_true(all(rec$in99))
+  expect_recovered(rec)
   expect_lt(fit$diagnostics$time_s, 60)
 })
 

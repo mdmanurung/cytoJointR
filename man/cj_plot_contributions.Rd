@@ -23,5 +23,5 @@ positive contributions. Intervals do not add up to the global interval.
 }
 \examples{
 pt <- cj_patterns(cj_example_draws(n_draw = 50), "RMS", c(RMS = 0.005))
-cj_plot_contributions(pt, contrast = "D1_v1_CMV")
+cj_plot_contributions(pt, contrast = "D1_v1_CD4_CMV")
 }

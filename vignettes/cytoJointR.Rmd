@@ -82,7 +82,7 @@ table(display_only = dsc$patterns$display_only)
 The plots use the signed values.
 
 ```{r describe-plots}
-cj_plot_pattern_heatmap(x, contrast = "D01_v1_CMV")
+cj_plot_pattern_heatmap(x, contrast = "D01_v1_CD4_CMV")
 cj_plot_degree_bars(x, "at_least")
 ```
 
@@ -138,8 +138,8 @@ For each score the function returns three probabilities that sum to one:
 eps <- c(RMS = 0.005, poly_absolute = 0.005, poly_marginal = 0.005, CPS = 0.02,
          CCS = 0.005, breadth = 0.05, marker_magnitude = 0.005)
 sc <- cj_scores(fit, eps)
-# D08_v1_CMV has no control sample in this simulation.
-sc[sc$score == "RMS" & sc$contrast_id %in% c("D01_v1_CMV", "D06_v1_CMV", "D08_v1_CMV"),
+# D08_v1_CD4_CMV has no control sample in this simulation.
+sc[sc$score == "RMS" & sc$contrast_id %in% c("D01_v1_CD4_CMV", "D06_v1_CD4_CMV", "D08_v1_CD4_CMV"),
    c("contrast_id", "estimate", "lower", "upper", "p_positive", "p_negative",
      "p_negligible", "status")]
 ```
@@ -172,7 +172,7 @@ bounds do not.
 
 ```{r patterns, eval = has_stan}
 pt <- cj_patterns(fit, "RMS", c(RMS = 0.005))
-head(subset(pt, contrast_id == "D01_v1_CMV" & status != "unavailable",
+head(subset(pt, contrast_id == "D01_v1_CD4_CMV" & status != "unavailable",
             c(pattern, degree, estimate, lower, upper, p_positive)))
 ```
 

@@ -72,13 +72,13 @@ test_that("negative effects stay negative and are not clipped", {
 })
 
 test_that("a contrast without control is unavailable with a status, not bare NA", {
-  d <- cj_example_draws(n_draw = 10, missing_control = "D1_v1_CMV")
+  d <- cj_example_draws(n_draw = 10, missing_control = "D1_v1_CD4_CMV")
   sd <- cj_score_draws(d)
-  expect_true(all(sd$status[sd$contrast_id == "D1_v1_CMV"] == "unavailable"))
+  expect_true(all(sd$status[sd$contrast_id == "D1_v1_CD4_CMV"] == "unavailable"))
   s <- cj_scores(d, EPS)
-  u <- s[s$contrast_id == "D1_v1_CMV", ]
+  u <- s[s$contrast_id == "D1_v1_CD4_CMV", ]
   expect_true(all(u$status == "unavailable" & is.na(u$estimate)))
-  expect_true(all(s$status[s$contrast_id != "D1_v1_CMV"] == "ok"))
+  expect_true(all(s$status[s$contrast_id != "D1_v1_CD4_CMV"] == "ok"))
 })
 
 test_that("cj_fit input adds raw counts to the pattern table", {
@@ -86,7 +86,7 @@ test_that("cj_fit input adds raw counts to the pattern table", {
   x <- example_data(d)
   fit <- cytoJointR:::new_cj_fit(x, d, NULL, NULL, NULL, NULL)
   pt <- cj_patterns(fit, "RMS", EPS["RMS"])
-  r <- pt[pt$contrast_id == "D1_v1_CMV", ][1, ]
+  r <- pt[pt$contrast_id == "D1_v1_CD4_CMV", ][1, ]
   expect_equal(r$n_S, unname(x$counts["D1_v1_CMV", r$pattern]))
   expect_equal(r$n_U, unname(x$counts["D1_v1_control", r$pattern]))
   expect_equal(r$N_S, 1000)
@@ -99,7 +99,7 @@ test_that("markers are labelled overlapping and plots build", {
   pt <- cj_patterns(d, c("RMS", "CCS"), EPS)
   expect_s3_class(cj_plot_response_heatmap(pt, "p_positive", score = "RMS"), "ggplot")
   expect_s3_class(cj_plot_response_heatmap(pt, "estimate", score = "CCS"), "ggplot")
-  expect_s3_class(cj_plot_contributions(pt, "RMS", "D1_v1_CMV"), "ggplot")
+  expect_s3_class(cj_plot_contributions(pt, "RMS", "D1_v1_CD4_CMV"), "ggplot")
 })
 
 test_that("cj_patterns works when a score keeps a single pattern (two markers)", {

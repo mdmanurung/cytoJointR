@@ -37,7 +37,7 @@ check_engine <- function(d) {
 test_that("vectorised engine equals the per-draw reference path", {
   expect_gt(check_engine(cj_example_draws(n_draw = 30)), 0)
   # Shared control per donor/visit across two stimulations, one unavailable contrast.
-  d <- cj_example_draws(n_draw = 30, missing_control = "D2_v1_CMV", effect = -1)
+  d <- cj_example_draws(n_draw = 30, missing_control = "D2_v1_CD4_CMV", effect = -1)
   expect_gt(check_engine(d), 0)
   expect_true(any(!vapply(cytoJointR:::compute_engine(d, FALSE), `[[`, TRUE, "available")))
 })
@@ -49,15 +49,15 @@ test_that("failed draws are flagged and kept, matching the reference", {
   stopifnot(!is.na(u), !is.na(s))
   d$p[3, u, 2] <- 0                                   # zero baseline probability
   d$p[7, s, d$bits[, 1] == 0] <- 1e-300               # marker 1 margin is 1: not interior
-  i <- match("D1_v1_CMV", d$contrasts$contrast_id)
+  i <- match("D1_v1_CD4_CMV", d$contrasts$contrast_id)
   eng <- cytoJointR:::compute_engine(d, TRUE)[[i]]
   expect_equal(which(eng$status != "ok"), c(3L, 7L))
   expect_true(all(is.na(eng$G[c(3, 7), ])))
   check_engine(d)
   # The summary counts them rather than dropping them.
   sc <- cj_scores(d, EPS, max_failure = 0.5)
-  expect_equal(sc$n_failed[sc$contrast_id == "D1_v1_CMV"][1], 2)
-  expect_equal(sc$n_draws[sc$contrast_id == "D1_v1_CMV"][1], 30)
+  expect_equal(sc$n_failed[sc$contrast_id == "D1_v1_CD4_CMV"][1], 2)
+  expect_equal(sc$n_draws[sc$contrast_id == "D1_v1_CD4_CMV"][1], 30)
 })
 
 test_that("the engine is computed once per object", {

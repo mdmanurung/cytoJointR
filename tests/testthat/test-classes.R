@@ -11,7 +11,7 @@ toy_parts <- function() {
   samples$N <- as.numeric(rowSums(counts))
   # One control sample shared by two stimulations.
   contrasts <- data.frame(
-    contrast_id = c("D1_v1_CMV", "D1_v1_SEB"), donor_id = "D1", visit = visit[1:2],
+    contrast_id = c("D1_v1_CD4_CMV", "D1_v1_CD4_SEB"), donor_id = "D1", visit = visit[1:2],
     parent_population = "CD4", stimulation = c("CMV", "SEB"),
     stim_sample_id = c("D1_cmv", "D1_seb"), control_sample_id = "D1_ctrl")
   list(counts = counts, samples = samples, contrasts = contrasts, bits = bits)

@@ -383,13 +383,7 @@ cj_example_draws <- function(n_donor = 3, n_draw = 200, markers = c("IFNG", "TNF
   samples <- data.frame(sample_id = grid$sample_id, donor_id = grid$donor_id,
                         visit = grid$visit, parent_population = "CD4",
                         condition = grid$condition, N = 1000, stringsAsFactors = FALSE)
-  stim <- samples[samples$condition != CONTROL_CONDITION, ]
-  contrasts <- data.frame(
-    contrast_id = paste(stim$donor_id, stim$visit, stim$condition, sep = "_"),
-    donor_id = stim$donor_id, visit = stim$visit, parent_population = "CD4",
-    stimulation = stim$condition, stim_sample_id = stim$sample_id,
-    control_sample_id = paste(stim$donor_id, stim$visit, CONTROL_CONDITION, sep = "_"),
-    stringsAsFactors = FALSE)
+  contrasts <- derive_contrasts(samples)
   contrasts$control_sample_id[contrasts$contrast_id %in% missing_control] <- NA_character_
   # Log-linear base: negative main effects, one positive pairwise interaction.
   shift <- ifelse(samples$condition == CONTROL_CONDITION, 0,

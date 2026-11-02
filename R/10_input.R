@@ -121,25 +121,7 @@ cj_from_counts <- function(counts, samples, markers) {
   samples <- samples[c(SAMPLE_COLUMNS, setdiff(names(samples), SAMPLE_COLUMNS))]
   rownames(samples) <- NULL
 
-  # Contrasts: pair each stimulation with its donor x visit x parent control ---
-  cell_key <- function(i) paste(samples$donor_id[i], samples$visit[i], samples$parent_population[i], sep = "\r")
-  ctrl <- which(samples$condition == CONTROL_CONDITION)
-  stim <- which(samples$condition != CONTROL_CONDITION)
-  if (anyDuplicated(cell_key(ctrl)))
-    stop("more than one control sample in donor x visit x parent population: ",
-         paste(samples$sample_id[ctrl][cell_key(ctrl) %in% cell_key(ctrl)[duplicated(cell_key(ctrl))]],
-               collapse = ", "), "; v0.1 has no replicate pooling policy", call. = FALSE)
-  contrasts <- data.frame(
-    contrast_id = paste(samples$donor_id[stim], samples$visit[stim], samples$parent_population[stim],
-                        samples$condition[stim], sep = "_"),
-    donor_id = samples$donor_id[stim], visit = samples$visit[stim],
-    parent_population = samples$parent_population[stim], stimulation = samples$condition[stim],
-    stim_sample_id = samples$sample_id[stim],
-    control_sample_id = samples$sample_id[ctrl][match(cell_key(stim), cell_key(ctrl))])
-  if (anyDuplicated(contrasts$contrast_id))
-    stop("more than one stimulated sample per donor x visit x parent population x stimulation: ",
-         paste(unique(contrasts$contrast_id[duplicated(contrasts$contrast_id)]), collapse = ", "),
-         call. = FALSE)
+  contrasts <- derive_contrasts(samples)
 
   new_cj_data(counts_mat, samples, contrasts, bits, provenance = list(
     source = "counts",

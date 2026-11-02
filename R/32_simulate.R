@@ -84,18 +84,7 @@ cj_simulate_counts <- function(n_donors = 12L, markers = c("IFNG", "TNF"),
   counts <- t(vapply(seq_len(nrow(p)), \(s) stats::rmultinom(1, N, p[s, ])[, 1], integer(nrow(bits))))
   dimnames(counts) <- list(samples$sample_id, pattern_labels(bits))
 
-  stim_rows <- which(samples$condition != CONTROL_CONDITION)
-  ctrl_id <- vapply(stim_rows, \(s) {
-    hit <- samples$sample_id[samples$condition == CONTROL_CONDITION & samples$donor_id == samples$donor_id[s] &
-                             samples$visit == samples$visit[s]]
-    if (length(hit)) hit else NA_character_
-  }, character(1))
-  contrasts <- data.frame(
-    contrast_id = paste(samples$donor_id[stim_rows], samples$visit[stim_rows], samples$condition[stim_rows], sep = "_"),
-    donor_id = samples$donor_id[stim_rows], visit = samples$visit[stim_rows],
-    parent_population = "CD4", stimulation = samples$condition[stim_rows],
-    stim_sample_id = samples$sample_id[stim_rows], control_sample_id = ctrl_id)
-  rownames(contrasts) <- NULL
+  contrasts <- derive_contrasts(samples)
   data <- new_cj_data(counts, samples, contrasts, bits,
                       provenance = list(generator = "A (exact M1)", seed = seed))
 

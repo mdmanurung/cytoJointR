@@ -2,7 +2,7 @@ test_that("cj_compass runs real COMPASS and returns native results", {
   skip_if_not_installed("COMPASS")
   d <- cj_example_draws(n_donor = 6, n_draw = 5, markers = c("IFNG", "TNF", "IL2"),
                         visits = "v1", stimulations = c("CMV", "SEB"),
-                        missing_control = "D6_v1_SEB")
+                        missing_control = "D6_v1_CD4_SEB")
   x <- example_data(d)
   cc <- cj_compass(x, iterations = 200, replications = 2)
   expect_s3_class(cc, "cj_compass")
@@ -11,7 +11,7 @@ test_that("cj_compass runs real COMPASS and returns native results", {
   expect_true("IFNG&!TNF&IL2" %in% colnames(cc$fits[[1]]$data$n_s))
   expect_equal(tail(colnames(cc$fits[[1]]$data$n_s), 1), "!IFNG&!TNF&!IL2")
   # The contrast without control is excluded and reported, not dropped silently.
-  expect_equal(cc$excluded$contrast_id, "D6_v1_SEB")
+  expect_equal(cc$excluded$contrast_id, "D6_v1_CD4_SEB")
   expect_false("D6" %in% cc$scores$donor_id[cc$scores$stimulation == "SEB"])
   # Tidy scores equal COMPASS's own numbers.
   f <- cc$fits[["CMV | v1 | CD4"]]

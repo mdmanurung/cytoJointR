@@ -98,7 +98,7 @@ cj_plot_response_heatmap <- function(patterns, value = c("p_positive", "estimate
 #' @export
 #' @examples
 #' pt <- cj_patterns(cj_example_draws(n_draw = 50), "RMS", c(RMS = 0.005))
-#' cj_plot_contributions(pt, contrast = "D1_v1_CMV")
+#' cj_plot_contributions(pt, contrast = "D1_v1_CD4_CMV")
 cj_plot_contributions <- function(patterns, score = NULL, contrast = NULL) {
   pd <- pattern_plot_data(patterns, score)
   if (!is.null(contrast)) pd <- pd[pd$contrast_id %in% contrast, ]

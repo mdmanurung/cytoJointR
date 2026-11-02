@@ -3,7 +3,7 @@ test_that("visit change is the per-draw difference of net scores", {
   vc <- cj_visit_change(d, EPS, "v1", "v2")
   sd <- cj_score_draws(d)
   one <- function(id) sd$value[sd$contrast_id == id & sd$score == "CCS"]
-  delta <- one("D2_v2_SEB") - one("D2_v1_SEB")
+  delta <- one("D2_v2_CD4_SEB") - one("D2_v1_CD4_SEB")
   r <- vc$donor[vc$donor$donor_id == "D2" & vc$donor$stimulation == "SEB" &
                   vc$donor$score == "CCS", ]
   expect_equal(r$estimate, mean(delta))
@@ -16,7 +16,7 @@ test_that("visit change is the per-draw difference of net scores", {
 })
 
 test_that("an unavailable contrast propagates to visit change", {
-  d <- cj_example_draws(n_draw = 10, missing_control = "D1_v2_CMV")
+  d <- cj_example_draws(n_draw = 10, missing_control = "D1_v2_CD4_CMV")
   vc <- cj_visit_change(d, EPS, "v1", "v2")
   u <- vc$donor[vc$donor$donor_id == "D1" & vc$donor$stimulation == "CMV", ]
   expect_true(all(u$status == "unavailable" & is.na(u$estimate) & !is.na(u$reason)))
@@ -25,7 +25,7 @@ test_that("an unavailable contrast propagates to visit change", {
   pop <- vc$population[vc$population$stimulation == "CMV", ]
   expect_true(all(pop$n_donors == 2 & pop$n_donors_unavailable == 1))
   # All donors unavailable -> population unavailable too.
-  d2 <- cj_example_draws(n_draw = 10, n_donor = 1, missing_control = "D1_v1_CMV")
+  d2 <- cj_example_draws(n_draw = 10, n_donor = 1, missing_control = "D1_v1_CD4_CMV")
   expect_true(all(cj_visit_change(d2, EPS, "v1", "v2")$population$status[
     cj_visit_change(d2, EPS, "v1", "v2")$population$stimulation == "CMV"] == "unavailable"))
 })

@@ -40,3 +40,17 @@ test_that("the centered parameterisation gives the same likelihood and recovery"
   expect_true(all(rec$in99))
   expect_lt(fit$diagnostics$time_s, 60)
 })
+
+test_that("a fit keeps its CSVs when an earlier fit from the same seed is collected", {
+  skip_if_no_stan()
+  fit_once <- function() {
+    sim <- cj_simulate_counts(n_donors = 4, N = 500, donor_visit = FALSE, seed = 21)
+    cj_fit(sim$data, chains = 2, iter_warmup = 100, iter_sampling = 100, seed = 1,
+           donor_visit = FALSE)
+  }
+  a <- fit_once()
+  b <- fit_once()
+  rm(a)
+  gc()
+  expect_true(all(file.exists(b$engine_fit$output_files())))
+})

@@ -80,8 +80,13 @@ cj_fit <- function(x, chains = 4L, iter_warmup = 1000L, iter_sampling = 1000L, s
   stopifnot(inherits(x, "cj_data"))
   d <- cj_design(x, donor_effects, donor_visit, centered)
   pr <- cj_resolve_priors(priors, d)
+  # cmdstanr names CSVs from the global RNG and the minute, so two fits that start from the
+  # same seed collide, and the older fit's finalizer then deletes the newer fit's files.
+  # A private output_dir is not auto-deleted, so the files live as long as the session.
+  out <- tempfile("m1_out_")
+  dir.create(out)
   args <- utils::modifyList(list(refresh = 0, parallel_chains = min(chains, 4L), sig_figs = 18,
-                           metric = if (centered) "dense_e" else "diag_e"), list(...))
+                           metric = if (centered) "dense_e" else "diag_e", output_dir = out), list(...))
   engine <- do.call(m1_compile()$sample,
                     c(list(data = m1_stan_data(d, x$counts, pr), chains = chains,
                            iter_warmup = iter_warmup, iter_sampling = iter_sampling,

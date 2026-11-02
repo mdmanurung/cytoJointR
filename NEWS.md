@@ -25,3 +25,6 @@
   See IMPLEMENTATION_STATUS.md, "Main limitation".
 * `cj_design()`, `cj_fit()` and `cj_prior_predict()` stop when the samples hold
   more than one parent population. New `cj_subset()` keeps one.
+* `cj_fit()` writes each fit's CmdStan CSVs to its own directory. Before, two
+  fits with the same `set.seed()` in the same minute got identical file names,
+  and garbage collection of the first fit deleted the second fit's draws.

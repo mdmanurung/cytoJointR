@@ -28,3 +28,20 @@
 * `cj_fit()` writes each fit's CmdStan CSVs to its own directory. Before, two
   fits with the same `set.seed()` in the same minute got identical file names,
   and garbage collection of the first fit deleted the second fit's draws.
+* `cj_fit(model = "m1dm")` (new default) adds a Dirichlet-multinomial sample
+  residual to M1: `y_s ~ DM(phi * softmax(eta_s))`, `inv_phi = 1 / phi ~
+  half-normal(0, 0.05)`. `model = "m1"` is the old model; its draws are
+  identical at a fixed seed. `level = "structured"` returns `softmax(eta_s)` in
+  `fit$draws`; `fit$draws_sample` and `fit$draws_structured` hold both. The
+  default model may change after the planned model comparison.
+* `cj_simulate_counts(truth = list(phi = ))` simulates the same residual (default
+  `Inf`, the old output) and returns `mu` (structured) beside `p` (realised).
+  `cj_prior_predict(model = )` draws `inv_phi` for `"m1dm"`. `cj_design()` gains
+  `overdispersed`; `cj_default_priors()` gains `inv_phi_sd`.
+* The compiled Stan executable is cached under a name that includes a hash of
+  `m1.stan`, so checkouts with different Stan code no longer overwrite each other.
+* `cj_compass()` now computes the COMPASS posterior, so `COMPASS::PosteriorDiff()`
+  and its relatives work on `$fits`.
+* `cj_describe()` no longer errors on data without contrasts.
+* Internal `cj_fit_dirichlet()`: independent conjugate `Dirichlet(a0 + y_s)` per
+  sample, no Stan; the baseline the hierarchical models must beat.

@@ -39,14 +39,16 @@ cj_plot_forest(sc, score = c("RMS", "CCS"))
 
 ## Scope status
 
-**Limitation:** in the 2026-11-02 pilot, intervals were well calibrated when
-data came from the model itself, but far too narrow (RMS coverage 0.23 of a
-nominal 0.90) when donors varied in marker-specific ways. Treat intervals on
-real data as optimistic until that is fixed.
+**Limitation:** the default model, `m1dm`, covers RMS well, including when donors
+vary in marker-specific ways (2026-11-02 benchmark). Its CPS intervals are
+conservative in most cells, wider than needed. CCS is experimental: no model covered it
+under donor heterogeneity (coverage 0.27 to 0.39 of a nominal 0.90 in generator B), so do not
+treat CCS intervals or signs as calibrated. The model default is a post hoc
+choice; see `docs/adr/0002-default-model-m1dm.md`.
 
 
 This is a development version (v0.1 in progress). The input layer,
-descriptive layer, M1 count model, score layer, visit change and the COMPASS
+descriptive layer, count model (`m1dm`, with `m1` for ablation), score layer, visit change and the COMPASS
 adapter are implemented and tested. `cj_from_gatingset()` has never run, the
 pilot benchmark is not finished, and CI has never run. See
 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for each item and its

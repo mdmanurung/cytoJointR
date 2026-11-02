@@ -4,6 +4,14 @@
   utilities (`cj_bits`, `cj_compress`, likelihood, IPF counterfactual,
   `cj_score_reference`, `cj_summarize_signed`) carried over unchanged; they
   passed 35/35 inherited expectations under R 4.5.1.
+* Model redesign (2026-11-02): `cj_fit()` defaults to `model = "m1dm"`, the M1
+  mean with a Dirichlet-multinomial sample residual; `model = "m1"` stays for
+  ablation. The default is a post hoc choice after the pre-registered rule
+  found no calibrated model. CPS intervals are conservative. See
+  `docs/adr/0002-default-model-m1dm.md`.
+* CCS is experimental: `cj_scores()`, `cj_score_draws()` and `cj_patterns()` add
+  a logical `experimental` column (`TRUE` for CCS), `cj_scores()` emits one
+  message per call, and plots label it "CCS (experimental)".
 * `cj_scores_from_probs(min_functional=)` is deprecated and ignored.
 * RTMB removed from Suggests: Stan via cmdstanr is the only engine in v0.1.
 * Input layer: `cj_from_counts()`, `cj_from_events()`, `cj_from_gatingset()`

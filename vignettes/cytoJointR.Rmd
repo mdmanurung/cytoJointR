@@ -96,7 +96,12 @@ cj_plot_pattern_scatter(ev, c("IFNG", "TNF", "IL2"),
 
 ## Fit
 
-`cj_fit()` fits the M1 model in Stan. `centered = TRUE` samples the donor
+`cj_fit()` fits the count model in Stan. The `model` argument picks it:
+`"m1dm"` (default) adds a Dirichlet-multinomial sample residual to the M1
+log-linear model, and `"m1"` is the plain multinomial version, kept for
+ablation. `"m1dm"` was chosen after a benchmark in which no model passed the
+pre-registered calibration rule; its CPS intervals are conservative (see
+`docs/adr/0002-default-model-m1dm.md`). `centered = TRUE` samples the donor
 effects on their natural scale with a dense metric. It gives the same
 posterior and is much faster when samples have many cells. The first call
 compiles the model, which takes about a minute and is cached.
@@ -125,6 +130,11 @@ head(summary(fit)$table, 8)
 stimulated and control probabilities of the same draw are paired, so draws
 stay aligned. The scores are `RMS`, `poly_absolute`, `poly_marginal`, `CPS`,
 `CCS`, `breadth` and `marker_magnitude`.
+
+**CCS is experimental.** No model covered it when donors vary beyond the
+model, so its intervals and signs are not calibrated. Score tables carry an
+`experimental` column (`TRUE` for CCS), and `cj_scores()` prints a message
+once per call.
 
 Epsilon is the smallest effect you would call meaningful, in the units of the
 score. You must choose it before looking at the results; there is no default.

@@ -16,7 +16,7 @@ Depends: R (>= 4.1.0)
 Imports:
     cmdstanr (>= 0.8.0),
     posterior,
-    ggplot2,
+    ggplot2 (>= 4.0.0),
     stats,
     utils
 Suggests:

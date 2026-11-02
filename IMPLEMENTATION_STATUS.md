@@ -130,12 +130,35 @@ for every model. CPS false signs are at most 0.006.
 
 The slowest C2 fit at 100 donors took 959 s.
 
-## Held-out generator D: PENDING
+## Held-out generator D (2026-11-02): `m1dm` not vetoed
 
-**Not run yet. Fill this in after D is opened.** Record: seeds and scenarios
-(plan: offset 900000, rare_weak and moderate, 30 seeds), RMS and CPS coverage
-per model, false signs, and whether `m1dm` still holds. D can only veto: a
-default that fails D is reported with the failure, not re-tuned.
+D was pre-registered before any candidate ran (outer repo commit `fed35d9`)
+and opened only after the default was chosen. It has two parts:
+- D1: a cell-level phenotype mixture;
+- D2: generator A with t3 donor effects.
+
+Both ran as rare_weak and moderate cells at J = 3 and 4, 30 seeds each (240
+replicates, seed offset 900000). Source:
+`runs/2026-11-02_redesign-D2-summary/calibration.tsv` and `false_sign.tsv`.
+A first attempt (`runs/2026-11-02_redesign-D`) failed in the harness before
+simulating; no model was fitted.
+
+- **RMS:** `m1dm` covers 0.84 to 0.95 and passes all 8 cells within 2 SE.
+  `m1` covers 0.78 to 0.92 and C0 covers 0.91 to 0.96.
+- **CPS:**
+  - `m1dm` covers 0.93 to 0.99. Three cells over-cover beyond the band
+    (0.985 to 0.993); none under-cover.
+  - `m1` under-covers on the phenotype mixture (D1: 0.41 to 0.48).
+  - C0 fails D2 moderate (0.01 to 0.23).
+- **CCS (experimental):** `m1dm` covers 0.94 to 0.997, all at or above
+  nominal.
+- **False signs:** `m1dm` 0, `m1` at most 0.002, C0 up to 0.99.
+- **RMS RMSE:** `m1dm` and `m1` are 25 to 45% below C0 in D1 and in the
+  D2 rare_weak cells, about 0.0004 vs 0.0006. In the D2 moderate cells all
+  three are about equal (0.0011 to 0.0012).
+
+Verdict: D does not veto `m1dm`. Its failures on D are conservative, the same
+pattern as in A and C.
 
 ## Main limitation: CCS is not calibrated
 

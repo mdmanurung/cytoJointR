@@ -23,3 +23,5 @@
 * Pilot benchmark (2026-11-02): good recovery when data come from M1, but
   coverage collapses under logistic-normal donor heterogeneity (RMS 0.23).
   See IMPLEMENTATION_STATUS.md, "Main limitation".
+* `cj_design()`, `cj_fit()` and `cj_prior_predict()` stop when the samples hold
+  more than one parent population. New `cj_subset()` keeps one.

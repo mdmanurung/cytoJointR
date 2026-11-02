@@ -39,3 +39,22 @@ test_that("the R linear predictor matches a direct evaluation of the model", {
   expect_equal(unname(eta[s, k]), sum(a) + sum(th), tolerance = 1e-12)
   expect_equal(unname(eta[, 1]), rep(0, nrow(eta)))           # eta_s0 = 0
 })
+
+test_that("two parent populations stop cj_design; cj_subset restores a valid one-population cj_data", {
+  x <- cj_simulate_counts(n_donors = 3, seed = 1)$data
+  two <- function(df, id = c("sample_id", "stim_sample_id", "control_sample_id", "contrast_id")) {
+    df$parent_population <- "CD8"
+    for (k in intersect(id, names(df))) df[[k]] <- paste0(df[[k]], "_CD8")
+    df
+  }
+  x2 <- x
+  x2$samples <- rbind(x$samples, two(x$samples))
+  x2$contrasts <- rbind(x$contrasts, two(x$contrasts))
+  x2$counts <- rbind(x$counts, `rownames<-`(x$counts, paste0(rownames(x$counts), "_CD8")))
+  expect_error(cj_design(x2), "CD4, CD8.*cj_subset")
+  expect_error(cj_prior_predict(x2, n_draws = 5), "cj_subset")
+  y <- cj_subset(x2, "CD8")
+  expect_s3_class(y, "cj_data")
+  expect_equal(unique(y$samples$parent_population), "CD8")
+  expect_s3_class(cj_design(y), "cj_design")
+})

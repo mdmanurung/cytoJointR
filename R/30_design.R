@@ -29,6 +29,10 @@ cj_design <- function(x, donor_effects = TRUE, donor_visit = TRUE, centered = FA
 }
 
 m1_design <- function(samples, bits, donor_effects = TRUE, donor_visit = TRUE, centered = FALSE) {
+  pops <- unique(as.character(samples$parent_population))
+  if (length(pops) > 1L)
+    stop("samples hold ", length(pops), " parent populations (", paste(pops, collapse = ", "),
+         "); v0.1 fits one. Use cj_subset(x, parent_population) first.", call. = FALSE)
   stims <- sort(setdiff(unique(as.character(samples$condition)), CONTROL_CONDITION))
   if (!length(stims)) stop("no stimulated samples: nothing to model", call. = FALSE)
   visits <- levels(droplevels(samples$visit))

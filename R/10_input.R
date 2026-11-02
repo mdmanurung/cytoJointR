@@ -148,6 +148,31 @@ cj_from_counts <- function(counts, samples, markers) {
     all_negative_assumed_zero = samples$sample_id[!seen[, 1L] & !recon]))
 }
 
+#' Keep one parent population of a `cj_data` object
+#'
+#' v0.1 fits one parent population at a time ([cj_design()] and [cj_fit()] stop
+#' on more than one). `cj_subset()` keeps the samples, counts and contrasts of
+#' one population and re-runs the `cj_data` validators.
+#'
+#' @param x A `cj_data` object.
+#' @param parent_population One population name found in `x$samples`.
+#' @return A `cj_data` object.
+#' @export
+#' @examples
+#' sim <- cj_simulate_counts(n_donors = 3, seed = 1)
+#' cj_subset(sim$data, "CD4")$samples$parent_population |> unique()
+cj_subset <- function(x, parent_population) {
+  stopifnot(inherits(x, "cj_data"), length(parent_population) == 1L)
+  keep <- as.character(x$samples$parent_population) == parent_population
+  if (!any(keep)) stop("no samples in parent population: ", parent_population, call. = FALSE)
+  samples <- x$samples[keep, , drop = FALSE]
+  rownames(samples) <- NULL
+  contrasts <- x$contrasts[as.character(x$contrasts$parent_population) == parent_population, ,
+                           drop = FALSE]
+  rownames(contrasts) <- NULL
+  new_cj_data(x$counts[keep, , drop = FALSE], samples, contrasts, x$bits, x$provenance)
+}
+
 # Long count table from a K-pattern code vector per sample; shared by the adapters.
 counts_long <- function(sample_id, code, n, bits) {
   data.frame(sample_id = sample_id, bits[code + 1L, , drop = FALSE], count = n,

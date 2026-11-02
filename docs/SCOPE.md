@@ -30,7 +30,7 @@ Where this file and the bundle disagree, this file wins for v0.1.
    per-pattern 2D scatters.
 3. **M1 count model in Stan** (only engine): log-linear pattern model with
    pairwise interactions; design = several stimulations per donor sharing a
-   control sample, repeated categorical visits, unbalanced donors allowed.
+   control sample, repeated categorical visits, unbalanced donors allowed. One parent population per fit in v0.1.
    - Fixed: marker main effects; per-stimulation induced effects; visit and
      visit x stimulation effects; pairwise interactions theta0 and per-
      stimulation delta (shared across visits).

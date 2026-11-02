@@ -31,7 +31,9 @@ compass_require <- function() {
 #' is reported in `filters`. Pass `category_filter = NULL` to keep every pattern.
 #'
 #' COMPASS FS, PFS and response probabilities have COMPASS's definitions and
-#' range. They are not cytoJointR sign probabilities and should not be
+#' range. `compass_response_degree*` is `COMPASS::Response()`: the mean, over
+#' the cell subsets with at least that many markers, of the posterior
+#' probability that the subset responds. They are not cytoJointR sign probabilities and should not be
 #' compared with `p_positive` as if they were.
 #'
 #' @param x A `cj_data` (or a `cj_fit`, whose `data` is used).
@@ -112,15 +114,18 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
                          status = if (ok) "fitted" else paste("failed:", fit), row.names = NULL)
     if (!ok) next
     fits[[g]] <- fit
+    # Response() returns a one-column matrix (rows = donors), so index its column
+    # by donor; indexing the matrix itself by name gives NA.
     resp <- function(deg) if (length(x$markers) >= deg)
-      suppressMessages(COMPASS::Response(fit, degree = deg)) else NA_real_
+      suppressMessages(COMPASS::Response(fit, degree = deg))[cg$donor_id, 1] else
+        rep(NA_real_, nrow(cg))
     tidy[[g]] <- data.frame(
       contrast_id = cg$contrast_id, donor_id = cg$donor_id, stimulation = cg$stimulation,
       visit = cg$visit, parent_population = cg$parent_population,
       compass_FS = unname(COMPASS::FunctionalityScore(fit)[cg$donor_id]),
       compass_PFS = unname(COMPASS::PolyfunctionalityScore(fit)[cg$donor_id]),
-      compass_response_degree1 = unname(resp(1)[cg$donor_id]),
-      compass_response_degree2 = unname(resp(2)[cg$donor_id]))
+      compass_response_degree1 = unname(resp(1)),
+      compass_response_degree2 = unname(resp(2)))
   }
   bind <- function(l) if (length(l)) do.call(rbind, unname(l))
   structure(list(fits = fits, scores = bind(tidy), groups = bind(groups),

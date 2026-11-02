@@ -39,7 +39,9 @@ patterns' cells to the all-negative pattern as COMPASS does. What was removed
 is reported in \code{filters}. Pass \code{category_filter = NULL} to keep every pattern.
 
 COMPASS FS, PFS and response probabilities have COMPASS's definitions and
-range. They are not cytoJointR sign probabilities and should not be
+range. \verb{compass_response_degree*} is \code{COMPASS::Response()}: the mean, over
+the cell subsets with at least that many markers, of the posterior
+probability that the subset responds. They are not cytoJointR sign probabilities and should not be
 compared with \code{p_positive} as if they were.
 }
 \examples{

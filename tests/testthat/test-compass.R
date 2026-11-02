@@ -17,6 +17,17 @@ test_that("cj_compass runs real COMPASS and returns native results", {
   f <- cc$fits[["CMV | v1 | CD4"]]
   tid <- cc$scores[cc$scores$stimulation == "CMV", ]
   expect_equal(tid$compass_FS, unname(COMPASS::FunctionalityScore(f)[tid$donor_id]))
+  # Response() is a one-column matrix by donor: no NA, same numbers as COMPASS.
+  expect_false(anyNA(cc$scores[c("compass_response_degree1", "compass_response_degree2")]))
+  expect_equal(tid$compass_response_degree2,
+               unname(COMPASS::Response(f, degree = 2)[tid$donor_id, 1]))
+  expect_true(all(tid$compass_response_degree1 >= 0 & tid$compass_response_degree1 <= 1))
+  # n_s and n_u are not swapped: stimulated above control gives FS well above
+  # the control-vs-control fit.
+  dd <- f$data
+  null <- COMPASS::SimpleCOMPASS(dd$n_u, dd$n_u, dd$meta, "donor_id",
+                                 iterations = 200, replications = 2)
+  expect_gt(mean(tid$compass_FS), mean(COMPASS::FunctionalityScore(null)))
   # The default filter's effect is reported.
   expect_true(all(c("n_removed", "removed") %in% names(cc$filters)))
   expect_equal(nrow(cc$filters), 2)

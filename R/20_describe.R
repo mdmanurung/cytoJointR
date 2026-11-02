@@ -46,10 +46,10 @@ cj_describe <- function(x) {
 
   cols <- c("n_stim", "pct_stim", "n_ctrl", "pct_ctrl", "net_percent")
   agg <- function(keep) {  # keep(degree, d) selects the patterns summed into row d
-    out <- do.call(rbind, lapply(sort(unique(p$degree)), function(k) {
+    out <- do.call(rbind, lapply(sort(unique(as.integer(deg))), function(k) {
       q <- p[keep(p$degree, k), ]
-      s <- rowsum(q[cols], q$contrast_id, reorder = FALSE)  # NA stays NA
-      data.frame(contrast_id = rownames(s), degree = k, s, row.names = NULL)
+      s <- if (nrow(q)) rowsum(q[cols], q$contrast_id, reorder = FALSE) else q[cols]  # NA stays NA
+      data.frame(contrast_id = unique(q$contrast_id), degree = rep(k, nrow(s)), s, row.names = NULL)
     }))
     meta <- ct[match(out$contrast_id, ct$contrast_id), c("donor_id", "visit", "parent_population", "stimulation")]
     out <- cbind(out[1L], meta, out[-1L])

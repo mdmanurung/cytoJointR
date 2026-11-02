@@ -34,3 +34,18 @@ test_that("summary reports contrasts lacking a control sample", {
   x$contrasts$control_sample_id[1] <- NA
   expect_output(print(x), "without a control sample: 1")
 })
+
+test_that("cj_describe works on data with no contrasts", {
+  x <- cj_example()
+  keep <- x$samples$condition == "control"
+  samples <- x$samples[keep, ]
+  y <- cj_from_counts(
+    data.frame(sample_id = rep(samples$sample_id, each = 4), IFNG = c(0, 1, 0, 1), TNF = c(0, 0, 1, 1),
+               count = as.vector(t(x$counts[samples$sample_id, ]))),
+    samples, c("IFNG", "TNF"))
+  expect_equal(nrow(y$contrasts), 0)
+  d <- cj_describe(y)
+  expect_equal(nrow(d$patterns), 0)
+  expect_equal(nrow(d$exactly), 0)
+  expect_equal(nrow(d$at_least), 0)
+})

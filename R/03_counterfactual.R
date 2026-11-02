@@ -1,7 +1,6 @@
 # Model-based IPF counterfactual: matching stimulated margins while preserving
 # all baseline log-linear interactions. Baseline probabilities must be positive.
-#' Documented in man/ (hand-written Rd).
-#' @noRd
+#' @rdname cytoJointR-reference
 #' @export
 cj_counterfactual <- function(p_u, p_s, bits, tol=1e-10, max_iter=10000L) {
   stopifnot(is.matrix(bits), nrow(bits)==length(p_u),
@@ -27,8 +26,7 @@ cj_counterfactual <- function(p_u, p_s, bits, tol=1e-10, max_iter=10000L) {
 
 # Compatibility name for earlier reference callers. All score algebra now lives
 # in cj_score_reference(); no separate small-denominator policy is applied here.
-#' Documented in man/ (hand-written Rd).
-#' @noRd
+#' @rdname cytoJointR-reference
 #' @export
 cj_scores_from_probs <- function(p_u, p_s, bits, min_functional = NULL) {
   if (!is.null(min_functional))

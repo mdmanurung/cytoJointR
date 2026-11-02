@@ -1,0 +1,211 @@
+---
+title: "Count workflow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Count workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 4)
+library(cytoJointR)
+# The fit chunks run only where CmdStan is installed.
+has_stan <- requireNamespace("cmdstanr", quietly = TRUE) &&
+  !is.null(tryCatch(cmdstanr::cmdstan_version(error_on_NA = FALSE), error = function(e) NULL))
+```
+
+This vignette runs the whole count workflow on a small simulated data set.
+The vocabulary (donor, contrast, pattern, net score, display-only value) is
+defined in `GLOSSARY.md` in the package source.
+Chunks that need CmdStan run only when it is installed
+(`r if (has_stan) "it is here" else "it is not here, so the fit chunks are shown but not run"`).
+
+## Data
+
+`cj_simulate_counts()` draws exact pattern counts from the model the fit
+assumes, so the truth is known. Here: 12 donors, three markers, one
+stimulation (CMV), two visits, and 20% of the donor-visits have no control
+sample.
+
+```{r sim}
+sim <- cj_simulate_counts(n_donors = 12, markers = c("IFNG", "TNF", "IL2"),
+                          stimulations = "CMV", visits = c("v1", "v2"), N = 1500,
+                          missing_control = 0.2, donor_visit = TRUE, seed = 2)
+sim$data$provenance$generator
+```
+
+The simulator returns a `cj_data`. With your own data, build one with
+`cj_from_counts()`. It takes a long table of raw integer counts (one row per
+sample and pattern) and a sample table, and it checks both.
+`cj_from_events()`, `cj_from_polyicsflow()` and `cj_from_gatingset()` end in
+the same constructor. A two-marker example:
+
+```{r from-counts-small}
+tab <- data.frame(
+  sample_id = rep(c("D1_ctrl", "D1_cmv"), each = 4),
+  IFNG = rep(c(0, 1, 0, 1), 2), TNF = rep(c(0, 0, 1, 1), 2),
+  count = c(940, 30, 20, 10, 800, 90, 60, 50))
+smp <- data.frame(sample_id = c("D1_ctrl", "D1_cmv"), donor_id = "D1",
+                  visit = factor("v1"), parent_population = "CD4",
+                  condition = c("control", "CMV"))
+cj_from_counts(tab, smp, c("IFNG", "TNF"))
+```
+
+`summary()` shows donors, visits, stimulations and the contrasts that have no
+control sample.
+
+```{r summary}
+x <- sim$data
+summary(x)
+```
+
+## Describe
+
+`cj_describe()` gives counts, percentages and the signed net percent
+(stimulated minus control) per contrast and pattern.
+
+```{r describe}
+dsc <- cj_describe(x)
+head(dsc$patterns[, c("contrast_id", "pattern", "pct_stim", "pct_ctrl", "net_percent")])
+head(dsc$at_least)
+```
+
+`net_percent` is signed and never clipped. The column `net_percent_display`
+is `pmax(net_percent, 0)` and `display_only` marks the rows where the two
+differ. Use the clipped column for plots only, never for inference.
+
+```{r clipped}
+table(display_only = dsc$patterns$display_only)
+```
+
+The plots use the signed values.
+
+```{r describe-plots}
+cj_plot_pattern_heatmap(x, contrast = "D01_v1_CMV")
+cj_plot_degree_bars(x, "at_least")
+```
+
+The pairwise scatters work from events, not counts.
+
+```{r scatter, message = FALSE}
+ev <- cj_simulate_cells(donors = 4, cells_per_sample = 400, seed = 1)$cells
+cj_plot_pattern_scatter(ev, c("IFNG", "TNF", "IL2"),
+                        c(IFNG = 0, TNF = 0, IL2 = 0), max_cells = 2000)
+```
+
+## Fit
+
+`cj_fit()` fits the M1 model in Stan. `centered = TRUE` samples the donor
+effects on their natural scale with a dense metric. It gives the same
+posterior and is much faster when samples have many cells. The first call
+compiles the model, which takes about a minute and is cached.
+
+```{r fit, eval = has_stan, message = FALSE}
+fit <- cj_fit(x, centered = TRUE, chains = 4, iter_warmup = 500,
+              iter_sampling = 500, seed = 1, adapt_delta = 0.95,
+              show_messages = FALSE)
+fit
+```
+
+## Diagnostics
+
+`print()` reports R-hat, effective sample size, divergences, treedepth hits
+and E-BFMI, and warns when one is outside its usual threshold. The full table
+is in `fit$diagnostics$summary`. Check this before reading any score.
+
+```{r diagnostics, eval = has_stan}
+fit$diagnostics[c("max_rhat", "min_ess_bulk", "n_divergent", "n_max_treedepth")]
+head(summary(fit)$table, 8)
+```
+
+## Scores
+
+`cj_scores()` evaluates each net score inside every posterior draw: the
+stimulated and control probabilities of the same draw are paired, so draws
+stay aligned. The scores are `RMS`, `poly_absolute`, `poly_marginal`, `CPS`,
+`CCS`, `breadth` and `marker_magnitude`.
+
+Epsilon is the smallest effect you would call meaningful, in the units of the
+score. You must choose it before looking at the results; there is no default.
+For each score the function returns three probabilities that sum to one:
+
+* `p_positive`: P(score > epsilon), a clear increase over control.
+* `p_negative`: P(score < -epsilon), a clear decrease.
+* `p_negligible`: P(|score| <= epsilon), no change that matters.
+
+```{r scores, eval = has_stan}
+eps <- c(RMS = 0.005, poly_absolute = 0.005, poly_marginal = 0.005, CPS = 0.02,
+         CCS = 0.005, breadth = 0.05, marker_magnitude = 0.005)
+sc <- cj_scores(fit, eps)
+# D08_v1_CMV has no control sample in this simulation.
+sc[sc$score == "RMS" & sc$contrast_id %in% c("D01_v1_CMV", "D06_v1_CMV", "D08_v1_CMV"),
+   c("contrast_id", "estimate", "lower", "upper", "p_positive", "p_negative",
+     "p_negligible", "status")]
+```
+
+Three points about these numbers.
+
+* **Net scores are signed.** A stimulation can lower a score below its
+  control. The estimate is then negative and `p_negative` is large. Nothing
+  is clipped at zero.
+* **Unavailable contrasts.** A donor-visit without a control sample has no
+  background, so its net scores cannot be computed. Those rows have
+  `status = "unavailable"` and `NA` estimates. They are not zero and not
+  dropped. The stimulated sample still enters the fit.
+* **Clipped values are display-only.** The clipped column of `cj_describe()`
+  exists to draw plots like polyICSFlow's. No score here uses it.
+
+```{r unavailable, eval = has_stan}
+table(sc$status)
+unique(sc$contrast_id[sc$status == "unavailable"])
+```
+
+A draw where the counterfactual solver fails is kept and counted in
+`n_failed`, never dropped silently.
+
+## Patterns
+
+`cj_patterns()` splits RMS, CPS or CCS into exact-pattern contributions. They
+add up to the global score in every draw. Posterior means add up; interval
+bounds do not.
+
+```{r patterns, eval = has_stan}
+pt <- cj_patterns(fit, "RMS", c(RMS = 0.005))
+head(subset(pt, contrast_id == "D01_v1_CMV" & status != "unavailable",
+            c(pattern, degree, estimate, lower, upper, p_positive)))
+```
+
+## Visit change
+
+`cj_visit_change()` subtracts the `from` visit's net score from the `to`
+visit's, draw by draw, for each donor. It is `unavailable` for a donor who
+lacks a control sample at either visit. The population row averages the
+available donors with equal weights and describes these donors only.
+
+```{r visit-change, eval = has_stan}
+vc <- cj_visit_change(fit, eps, from = "v1", to = "v2")
+subset(vc$population, score == "RMS",
+       c(stimulation, estimate, lower, upper, p_positive, n_donors, n_donors_unavailable))
+table(vc$donor$reason, useNA = "ifany")
+```
+
+## Plots
+
+The response heatmap shows, per donor and pattern, the probability that the
+pattern's contribution exceeds epsilon. Unavailable contrasts are left out.
+The forest plot shows the signed score per contrast with its interval and the
+`+-epsilon` lines; the caption counts the unavailable contrasts.
+
+```{r heatmap, eval = has_stan, fig.height = 4}
+cj_plot_response_heatmap(pt, "p_positive")
+```
+
+```{r forest, eval = has_stan, fig.height = 5}
+cj_plot_forest(sc, score = c("RMS", "CCS"))
+```
+
+```{r no-stan, eval = !has_stan, echo = FALSE, results = "asis"}
+cat("*CmdStan was not found, so the chunks that fit the model were not run.",
+    "Install it with `cmdstanr::install_cmdstan()` and rebuild.*")
+```

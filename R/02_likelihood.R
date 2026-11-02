@@ -1,8 +1,7 @@
 # Verification reference: Gaussian conditionally truncated at a fixed gate.
 # One marker and one gate-defined population (positive OR negative).
 # The conditional density normalization is essential; omitting it breaks the joint model.
-#' Documented in man/ (hand-written Rd).
-#' @noRd
+#' @rdname cytoJointR-reference
 #' @export
 cj_log_trunc_gaussian_raw <- function(x, mu, sigma, threshold, positive) {
   stopifnot(length(sigma)==1L, sigma>0, all(is.finite(x)))
@@ -15,8 +14,7 @@ cj_log_trunc_gaussian_raw <- function(x, mu, sigma, threshold, positive) {
   sum(dnorm(x, mean=mu, sd=sigma, log=TRUE)) - length(x)*lp
 }
 
-#' Documented in man/ (hand-written Rd).
-#' @noRd
+#' @rdname cytoJointR-reference
 #' @export
 cj_log_trunc_gaussian_compressed <- function(n, sx, ss, mu, sigma,
                                               threshold, positive) {
@@ -30,8 +28,7 @@ cj_log_trunc_gaussian_compressed <- function(n, sx, ss, mu, sigma,
     (ss - 2*mu*sx + n*mu^2)/(2*sigma^2) - n*lp
 }
 
-#' Documented in man/ (hand-written Rd).
-#' @noRd
+#' @rdname cytoJointR-reference
 #' @export
 cj_log_multinomial <- function(n, p) {
   stopifnot(length(n)==length(p), all(n>=0),

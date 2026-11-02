@@ -1,8 +1,52 @@
 # Reference implementation for a cell-level data.frame.
 # Prototype: independent of RTMB. R execution tests are mandatory.
 # Fluorescence is assumed ALREADY transformed and quality controlled.
-#' Documented in man/ (hand-written Rd).
-#' @noRd
+#' Reference utilities for cytoJointR development
+#'
+#' Provides deterministic data-frame compression, conditional Gaussian log
+#' likelihoods and marginal-matched polyfunctionality scores. Full joint
+#' hierarchical inference remains unimplemented.
+#'
+#' This reference version does not contain the planned RTMB joint hierarchical
+#' inference engine. Results from the reference functions are not empirical
+#' Bayesian posterior estimates.
+#'
+#' @param markers Character vector of marker names.
+#' @param cells One event per row in a data.frame, with sample metadata.
+#' @param sample Sample identifier column.
+#' @param donor Donor identifier column.
+#' @param condition Stimulation-condition column.
+#' @param positive Named or ordered columns containing binary positivity calls.
+#'   For the likelihood functions, whether the gate is the positive population.
+#' @param thresholds Named transformed-fluorescence thresholds, ordered like
+#'   markers.
+#' @param metadata Additional sample-level metadata fields.
+#' @param x Vector of transformed fluorescence values.
+#' @param mu Gaussian mean.
+#' @param sigma Gaussian standard deviation.
+#' @param threshold Fixed transformed positivity cutoff.
+#' @param n Number of cells or counts for one category.
+#' @param sx Sum of transformed fluorescence.
+#' @param ss Sum of squared transformed fluorescence.
+#' @param p Probability vector of mutually exclusive patterns.
+#' @param p_u Unstimulated pattern-probability vector.
+#' @param p_s Stimulated pattern-probability vector.
+#' @param bits Matrix of binary marker patterns.
+#' @param tol Convergence tolerance for IPF.
+#' @param max_iter Maximum iterations for IPF.
+#' @param donors Number of donors in the synthetic experiment.
+#' @param cells_per_sample Acquired cells per observed donor-condition sample.
+#' @param regime Antigen-specific or polyclonal simulation regime.
+#' @param missing_controls Fraction of deliberately missing control samples.
+#' @param seed Random seed.
+#' @param min_functional Deprecated compatibility argument, ignored with a
+#'   warning when supplied; inspect positivity denominators and support
+#'   diagnostics.
+#' @return Depending on the function: binary pattern matrix, compressed object,
+#'   numeric log likelihood, pattern-probability vector or named functional
+#'   scores.
+#' @name cytoJointR-reference
+#' @aliases cytoJointR-reference
 #' @export
 cj_bits <- function(markers) {
   stopifnot(is.character(markers), length(markers) >= 1L,
@@ -13,8 +57,7 @@ cj_bits <- function(markers) {
   out
 }
 
-#' Documented in man/ (hand-written Rd).
-#' @noRd
+#' @rdname cytoJointR-reference
 #' @export
 cj_compress <- function(cells, markers, sample = "sample_id",
                         donor = "donor_id", condition = "condition",

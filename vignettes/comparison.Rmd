@@ -1,0 +1,125 @@
+---
+title: "Relation to COMPASS and polyICSFlow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Relation to COMPASS and polyICSFlow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 4)
+library(cytoJointR)
+has_compass <- requireNamespace("COMPASS", quietly = TRUE)
+has_stan <- requireNamespace("cmdstanr", quietly = TRUE) &&
+  !is.null(tryCatch(cmdstanr::cmdstan_version(error_on_NA = FALSE), error = function(e) NULL))
+```
+
+cytoJointR does not replace COMPASS or polyICSFlow. For each of their
+features it either has its own counterpart or hands the work to the real
+package through an adapter. This page lists the mapping, then shows where
+the numbers differ and why.
+
+## Feature mapping
+
+| Tool | Feature | cytoJointR counterpart | Status |
+|---|---|---|---|
+| COMPASS | Functionality score (FS) | `cj_compass()` returns native `compass_FS`; own signed scores: `cj_scores()` (`RMS`, `CPS`, `CCS`, ...) | adapter and own model |
+| COMPASS | Polyfunctionality score (PFS) | `cj_compass()` returns native `compass_PFS`; own: `poly_absolute`, `poly_marginal`, `breadth` | adapter and own model |
+| COMPASS | `Response()` | `cj_compass()` returns `compass_response_degree1` and `compass_response_degree2`; own: `p_positive` per pattern from `cj_patterns()` | adapter and own model |
+| COMPASS | Mean-gamma heatmap | `cj_plot_compass()` draws COMPASS's own; own: `cj_plot_response_heatmap()` | adapter and own plot |
+| COMPASS | Posterior differences | `COMPASS::PosteriorDiff()` works on `cj_compass()$fits`; own: `cj_scores()` and `cj_visit_change()` give signed draws-based differences | adapter (not wrapped) and own model |
+| COMPASS | Category filters | `cj_compass(category_filter=)` applies COMPASS's default and reports what it removed in `$filters` | adapter |
+| COMPASS | `GatingSet` input | `cj_from_gatingset()`; **not verified**, see below | unverified |
+| COMPASS | Shiny app | none | deferred |
+| polyICSFlow | Marker positivity | `cj_from_events(thresholds=)` and `cj_plot_pattern_scatter()` | own |
+| polyICSFlow | `MarkerComb` table | `cj_from_polyicsflow()` reads `extractCellCounts()` output | adapter (tested on a hand-built table only) |
+| polyICSFlow | Background-subtracted percentages | `cj_describe()$patterns$net_percent` (signed) and `net_percent_display` (clipped) | own |
+| polyICSFlow | Heatmap | `cj_plot_pattern_heatmap()` | own |
+| polyICSFlow | Exactly-n and at-least-n bars | `cj_plot_degree_bars(type = "exactly" / "at_least")` | own |
+| polyICSFlow | 2D scatters | `cj_plot_pattern_scatter()` | own |
+
+Two limits on that table.
+
+* Shiny is deferred. Nothing in the package serves an interactive app.
+* `cj_from_gatingset()` is unverified. `flowWorkspace` segfaults on the
+  development host, even after rebuilding its dependency chain from source,
+  so the function has never run. Use `cj_from_counts()` or
+  `cj_from_events()` if you can export counts or events yourself.
+
+## Where the numbers differ
+
+**Clipping.** polyICSFlow clips background-subtracted percentages at 0.
+cytoJointR keeps the signed value in `net_percent`. The clipped value is a
+separate column, `net_percent_display`, for plots only, and `display_only`
+marks the rows where clipping changed the number. No score or probability
+uses it.
+
+**COMPASS scores are not sign probabilities.** COMPASS FS, PFS and
+`Response()` come from its responder mixture model. They are bounded
+quantities with COMPASS's definitions. They are not cytoJointR's
+`p_positive`, `p_negative` and `p_negligible`, and the two should not be
+compared as if they were. The adapter never relabels one as the other. See
+`docs/adr/0001-compass-parity-via-adapter.md` in the package source.
+
+## Clipping in practice
+
+```{r data}
+# The default simulated effect is so strong that every donor responds in every
+# pattern, which COMPASS's heatmap cannot draw. Weaken the stimulation effect.
+args <- list(n_donors = 10, markers = c("IFNG", "TNF", "IL2"), stimulations = "CMV",
+             visits = "v1", N = 1500, seed = 3)
+gamma <- do.call(cj_simulate_counts, args)$truth$gamma
+gamma["stim_CMV", ] <- gamma["stim_CMV", ] - 1.7
+x <- do.call(cj_simulate_counts, c(args, list(truth = list(gamma = gamma))))$data
+p <- cj_describe(x)$patterns
+neg <- p[p$display_only, c("contrast_id", "pattern", "net_percent", "net_percent_display")]
+head(neg)
+```
+
+These rows are the all-negative pattern, which loses cells to the positive
+patterns. The signed value is negative and the display column shows 0.
+Averaging the display column would bias the mean upward; the signed column
+does not.
+
+## COMPASS through the adapter
+
+`cj_compass()` runs one `COMPASS::SimpleCOMPASS()` per stimulation, visit and
+parent population. The chunk runs only when COMPASS is installed
+(`r if (has_compass) "it is" else "it is not"` here).
+
+```{r compass, eval = has_compass, message = FALSE}
+# COMPASS warns that it cannot infer the marker count after its category filter.
+cc <- suppressWarnings(cj_compass(x, iterations = 300, replications = 2, seed = 1))
+head(cc$scores)
+cc$filters[, c("group", "n_patterns", "n_removed", "removed")]
+```
+
+The filter line shows what COMPASS's default category filter removed. The
+native `COMPASSResult` objects are in `cc$fits`, so any COMPASS function
+works on them.
+
+```{r compass-plot, eval = has_compass, fig.height = 5}
+cj_plot_compass(cc)
+```
+
+Side by side with the signed score of the same contrast, when CmdStan is
+also available:
+
+```{r compare, eval = has_compass && has_stan, message = FALSE}
+fit <- cj_fit(x, centered = TRUE, chains = 4, iter_warmup = 500, iter_sampling = 500,
+              seed = 1, adapt_delta = 0.95, show_messages = FALSE)
+eps <- c(RMS = 0.005, poly_absolute = 0.005, poly_marginal = 0.005, CPS = 0.02,
+         CCS = 0.005, breadth = 0.05, marker_magnitude = 0.005)
+sc <- cj_scores(fit, eps)
+rms <- sc[sc$score == "RMS", c("contrast_id", "estimate", "p_positive")]
+m <- merge(cc$scores[c("contrast_id", "compass_FS", "compass_PFS")], rms)
+head(m)
+```
+
+`compass_FS` and `estimate` (the RMS net score) move together across donors here, but they are different quantities on different
+scales, and `compass_FS` has no sign.
+
+```{r no-compass, eval = !has_compass, echo = FALSE, results = "asis"}
+cat("*COMPASS is not installed, so the adapter chunks were not run.*")
+```

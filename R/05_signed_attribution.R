@@ -1,8 +1,36 @@
 # Deterministic reference algebra only: supplied probabilities and conditional
 # excesses are NOT a fitted model and carry no uncertainty by themselves.
 # First marker is the low bit, matching cj_bits().
-#' Documented in man/ (hand-written Rd).
-#' @noRd
+#' Deterministic signed score and exact attribution references
+#'
+#' Calculate signed score algebra and mutually exclusive pattern
+#' contributions. These functions fit no model and establish no uncertainty
+#' calibration.
+#'
+#' Marker marginals overlap. Exact pattern contributions are additive. Absolute
+#' polyfunctional change equals its marginal path contribution plus
+#' coordination. FIS is reported in raw chosen transformed units, with optional
+#' fixed-scale standardization. Nonfinite draws are rejected rather than
+#' silently dropped. Supplied fluorescence values must be expected positive
+#' gate excess, not untruncated Gaussian locations.
+#'
+#' @param p_u,p_s Normalized strictly positive pattern probabilities.
+#' @param bits Complete binary matrix, patterns by markers.
+#' @param excess_u,excess_s Optional nonnegative conditional fluorescence
+#'   excess matrices, zero in marker-negative states.
+#' @param reference_weights Optional fixed FIS weights, zero in negative
+#'   states, summing to one per marker.
+#' @param reference_scale Optional positive fixed scales named in marker order
+#'   for standardized FIS.
+#' @param draws A nonempty finite numeric vector of supplied aligned-derived
+#'   draws.
+#' @param epsilon Prespecified nonnegative meaningful-effect threshold in
+#'   score units.
+#' @param level Central interval probability.
+#' @return The score function returns global, pattern, marker and intensity
+#'   tables with numerical diagnostics. The summary function returns the mean,
+#'   central interval and threshold probabilities from supplied draws.
+#' @name cj_score_reference
 #' @export
 cj_score_reference <- function(p_u, p_s, bits, excess_u = NULL,
                                excess_s = NULL, reference_weights = NULL,
@@ -115,8 +143,7 @@ cj_score_reference <- function(p_u, p_s, bits, excess_u = NULL,
 
 # No automatic omission of invalid draws. They indicate a model/draw/score
 # failure requiring inspection; filtering them can distort the target law.
-#' Documented in man/ (hand-written Rd).
-#' @noRd
+#' @rdname cj_score_reference
 #' @export
 cj_summarize_signed <- function(draws, epsilon, level = 0.95) {
   if (!is.numeric(draws) || !length(draws) || any(!is.finite(draws)))

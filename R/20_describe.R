@@ -1,10 +1,6 @@
 # Descriptive layer: counts, percentages and signed background subtraction per
 # contrast. Written from the spec; clipping exists only in net_percent_display.
 
-#' @importFrom ggplot2 .data
-#' @noRd
-NULL
-
 #' Describe a `cj_data` object per contrast and pattern
 #'
 #' @param x A `cj_data` object.

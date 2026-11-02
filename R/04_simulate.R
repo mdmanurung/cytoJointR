@@ -1,8 +1,7 @@
 # Lightweight independent simulation of paired cell-level data with known
 # multinomial pattern probabilities and threshold-compatible fluorescence.
 # Stress generators with WRONG emission models must be added for benchmarks.
-#' Documented in man/ (hand-written Rd).
-#' @noRd
+#' @rdname cytoJointR-reference
 #' @export
 cj_simulate_cells <- function(donors=12L, cells_per_sample=1500L,
                               markers=c("IFNG", "TNF", "IL2"),

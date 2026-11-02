@@ -74,17 +74,86 @@ binomial Monte Carlo SE about 0.05 at 30 seeds. One pilot, not confirmation.
 * **Not run:** J = 4 at 100 donors; J = 4 at 24 donors for null, negative
   margins and visit change.
 
-## Main limitation: donor heterogeneity beyond the model
+## Model redesign benchmark (2026-11-02)
 
-**Under generator B (logistic-normal pattern probabilities, heterogeneous
-donors), coverage collapses: RMS 0.23 (SE 0.08), CPS 0.07, CCS 0.14, and the
-CCS false sign rate is 0.19.** M1 gives donors one shared basal and one induced
-effect with unit loadings across markers, so donor variation that is
-marker-specific or pattern-specific is pooled away and intervals are far too
-narrow. This is the over-pooling risk the design bundle named (doc 14). Real
-data will usually look more like generator B than generator A. Candidate
-fixes, not yet built: marker-specific donor effects, or sample-level
-overdispersion (for example a per-sample pattern random effect).
+Source: `cytoJointR-reproducibility/runs/2026-11-02_redesign-summary/` (tables
+named below) and `runs/2026-11-02_redesign-decision/README.md`. 545 replicates,
+18 A/B/C cells (J = 3 and 4, 24 donors), 30 seeds per cell. C0 is the
+independent Dirichlet baseline, C1 is `model = "m1"`, C2 is `model = "m1dm"`
+(the default). The pre-registered rule found no calibrated model; the default
+is a post hoc choice (`docs/adr/0002-default-model-m1dm.md`).
+
+**Coverage of 90% intervals** (`calibration.tsv`; sample draws, sample target,
+global scores). Mean over cells, range in brackets. Generator A has 14 cells,
+B and C have 2 each.
+
+| Score | Model | Generator A | Generator B | Generator C |
+|---|---|---|---|---|
+| RMS | C0 | 0.93 (0.90-0.97) | 0.93 (0.92-0.93) | 0.93 (0.92-0.94) |
+| RMS | C1 | 0.91 (0.87-0.99) | 0.91 (0.91-0.91) | 0.87 (0.87-0.88) |
+| RMS | C2 | 0.92 (0.88-0.99) | 0.90 (0.90-0.90) | 0.88 (0.88-0.88) |
+| CPS | C0 | 0.80 (0.00-1.00) | 0.11 (0.00-0.21) | 0.90 (0.81-0.99) |
+| CPS | C1 | 0.78 (0.51-1.00) | 0.30 (0.24-0.35) | 0.69 (0.59-0.79) |
+| CPS | C2 | 0.99 (0.98-1.00) | 0.83 (0.81-0.84) | 0.99 (0.99-0.99) |
+| CCS | C0 | 0.61 (0.00-0.98) | 0.00 (0.00-0.01) | 0.69 (0.64-0.74) |
+| CCS | C1 | 0.99 (0.83-1.00) | 0.33 (0.27-0.39) | 1.00 (1.00-1.00) |
+| CCS | C2 | 1.00 (0.98-1.00) | 0.36 (0.34-0.37) | 1.00 (0.99-1.00) |
+
+**Rare-weak detection** (`auc.tsv`; AUC for telling the rare_weak scenario from
+null, sample target, J = 3 / J = 4):
+
+| Detector | AUC |
+|---|---|
+| C1 P(RMS > eps) | 0.989 / 0.987 |
+| C2 P(RMS > eps) | 0.983 / 0.980 |
+| C0 P(RMS > eps) | 0.805 / 0.799 |
+| COMPASS default FS | 0.918 / 0.912 |
+| COMPASS nofilter FS | 0.887 / 0.921 |
+| polyICSFlow net_sum (unclipped) | 0.810 / 0.802 |
+
+**RMSE gain** (`calibration.tsv`, global RMS, mean over rare_weak and
+rare_moderate at J = 3 and 4): C0 6.39e-4, C1 4.42e-4, C2 4.42e-4. Both
+hierarchies are 31% below C0.
+
+**False signs** (`false_sign.tsv`; P(effect > eps) > 0.95 while truth <= 0;
+generator B has no rows). CCS under C0: up to 0.995 (mean 0.30 in generator A).
+CCS under C1: at most 0.002. CCS under C2: 0. RMS false signs are at most 0.058
+for every model. CPS false signs are at most 0.006.
+
+**Runtime** (`runtime.tsv`; median seconds per fit, C0 on 1 CPU, C1 and C2 on
+4):
+
+| Scenario | C0 | C1 | C2 | COMPASS default | polyICSFlow |
+|---|---|---|---|---|---|
+| rare_weak_J3, 24 donors | 2.84 | 11.27 | 17.85 | 10.23 | 5.69 |
+| runtime_100_J4, 100 donors (5 seeds) | 20.06 | 85.29 | 127.70 | 74.93 | 26.02 |
+
+The slowest C2 fit at 100 donors took 959 s.
+
+## Held-out generator D: PENDING
+
+**Not run yet. Fill this in after D is opened.** Record: seeds and scenarios
+(plan: offset 900000, rare_weak and moderate, 30 seeds), RMS and CPS coverage
+per model, false signs, and whether `m1dm` still holds. D can only veto: a
+default that fails D is reported with the failure, not re-tuned.
+
+## Main limitation: CCS is not calibrated
+
+**The generator-B RMS and CPS collapse is fixed by `m1dm`; CCS is still not
+calibrated, and CPS intervals are conservative.** Under generator B the
+pilot's M1 gave RMS coverage 0.23 and CPS 0.07. In the redesign benchmark,
+`m1dm` gives RMS 0.90 and CPS 0.83 there (`calibration.tsv`, table above).
+
+- **CCS** covers only 0.34 to 0.37 under `m1dm` and 0.27 to 0.39 under `m1`
+  in generator B. No model covered it, so CCS is marked experimental: the
+  `experimental` column, one message per `cj_scores()` call, and the
+  "(experimental)" plot label. The C0 baseline gives CCS false signs up to
+  0.995, so dropping the model is no fix.
+- **CPS under `m1dm`** covers 0.98 to 1.00 in generators A and C for a nominal
+  0.90, so its intervals are wider than needed. In generator B it covers
+  0.81 to 0.84. The cause of the over-coverage is unverified; the Dirichlet
+  residual may inflate ratio-type scores.
+- Generators A, B and C are simulations. Real data may differ from all three.
 
 ## Parameterisation
 

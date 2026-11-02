@@ -28,8 +28,10 @@ Where this file and the bundle disagree, this file wins for v0.1.
    counts and percentages, signed background subtraction, clipped values only
    as a display-only column, pattern heatmap, exactly-n / at-least-n bars,
    per-pattern 2D scatters.
-3. **M1 count model in Stan** (only engine): log-linear pattern model with
-   pairwise interactions; design = several stimulations per donor sharing a
+3. **Count model in Stan** (only engine): `m1dm` is the default; `m1` is kept
+   for ablation. Both are the M1 log-linear pattern model with pairwise
+   interactions; `m1dm` adds a Dirichlet-multinomial sample residual (see
+   `docs/adr/0002-default-model-m1dm.md`); design = several stimulations per donor sharing a
    control sample, repeated categorical visits, unbalanced donors allowed. One parent population per fit in v0.1.
    - Fixed: marker main effects; per-stimulation induced effects; visit and
      visit x stimulation effects; pairwise interactions theta0 and per-

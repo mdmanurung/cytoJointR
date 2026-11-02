@@ -41,7 +41,8 @@ cj_plot_forest(sc, score = c("RMS", "CCS"))
 
 **Limitation:** the default model, `m1dm`, covers RMS well, including when donors
 vary in marker-specific ways (2026-11-02 benchmark). Its CPS intervals are
-conservative in most cells, wider than needed. CCS is experimental: no model covered it
+conservative when donors are homogeneous and slightly narrow (0.81 to 0.84) under
+marker-specific donor heterogeneity. CCS is experimental: no model covered it
 under donor heterogeneity (coverage 0.27 to 0.39 of a nominal 0.90 in generator B), so do not
 treat CCS intervals or signs as calibrated. The model default is a post hoc
 choice; see `docs/adr/0002-default-model-m1dm.md`.

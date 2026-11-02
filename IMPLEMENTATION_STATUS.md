@@ -140,7 +140,7 @@ default that fails D is reported with the failure, not re-tuned.
 ## Main limitation: CCS is not calibrated
 
 **The generator-B RMS and CPS collapse is fixed by `m1dm`; CCS is still not
-calibrated, and CPS intervals are conservative.** Under generator B the
+calibrated. CPS intervals are conservative when donors are homogeneous (coverage 0.98 to 1.00) and slightly narrow under marker-specific donor heterogeneity (0.81 to 0.84 of a nominal 0.90).** Under generator B the
 pilot's M1 gave RMS coverage 0.23 and CPS 0.07. In the redesign benchmark,
 `m1dm` gives RMS 0.90 and CPS 0.83 there (`calibration.tsv`, table above).
 

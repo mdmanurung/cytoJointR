@@ -79,7 +79,8 @@ ablation.
 Why \code{"m1dm"} is the default: in the 2026-11-02 benchmark (545 replicates, 18
 cells) the pre-registered rule found no calibrated model, so the choice is post
 hoc. \code{"m1"} under-covers (CPS 0.24 to 0.79 in cells it failed), while \code{"m1dm"}
-errs the other way: its CPS intervals are conservative. Both keep RMS coverage
+errs the other way in the cells it fails (CPS over-covers), and covers CPS at
+0.81 to 0.84 under marker-specific donor heterogeneity. Both keep RMS coverage
 inside the band in every cell. See \code{docs/adr/0002-default-model-m1dm.md}. CCS is
 experimental under either model, because no model covered it under donor
 heterogeneity.

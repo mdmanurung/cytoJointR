@@ -7,7 +7,7 @@
 * Model redesign (2026-11-02): `cj_fit()` defaults to `model = "m1dm"`, the M1
   mean with a Dirichlet-multinomial sample residual; `model = "m1"` stays for
   ablation. The default is a post hoc choice after the pre-registered rule
-  found no calibrated model. CPS intervals are conservative. See
+  found no calibrated model. CPS intervals are conservative when donors are homogeneous (coverage 0.98 to 1.00) and slightly narrow under marker-specific donor heterogeneity (0.81 to 0.84 of a nominal 0.90). See
   `docs/adr/0002-default-model-m1dm.md`.
 * CCS is experimental: `cj_scores()`, `cj_score_draws()` and `cj_patterns()` add
   a logical `experimental` column (`TRUE` for CCS), `cj_scores()` emits one

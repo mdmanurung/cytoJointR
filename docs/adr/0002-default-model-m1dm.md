@@ -56,7 +56,8 @@ direction:
 chose C2 on 2026-11-02, against the rule's "no default" output.
 
 Why C2: RMS coverage is in the band for C1 and C2 in every cell. C2's
-failures are conservative, C1's understate uncertainty. Both cut RMS RMSE on
+failing cells all over-cover; C1's under-cover. In the cells C2 passes under
+generator B, its CPS coverage is 0.81 to 0.84, slightly narrow but within 2 SE. Both cut RMS RMSE on
 rare_weak plus rare_moderate by 31% against C0
 (`calibration.tsv`).
 
@@ -72,7 +73,7 @@ rare_weak plus rare_moderate by 31% against C0
 
 ## Consequences
 
-- CPS intervals under `m1dm` are conservative. Report them as such.
+- CPS intervals are conservative when donors are homogeneous (coverage 0.98 to 1.00) and slightly narrow under marker-specific donor heterogeneity (0.81 to 0.84 of a nominal 0.90). Report both.
 - CCS is experimental under every model. Score tables carry an
   `experimental` column and `cj_scores()` says so once per call.
 - Fits cost more: about 1.5 times M1's median time (`runtime.tsv`).

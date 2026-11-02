@@ -41,8 +41,12 @@ m1_stan_data <- function(d, counts, pr) {
 #'   instead of the noncentered default. Both give the same posterior. With many
 #'   cells per sample (data-dominated donors) the noncentered form needs very small
 #'   steps; in a J = 3, 24-donor, 10 000-cell benchmark the centered form with a dense
-#'   metric (set automatically) took about a quarter of the time. `FALSE` keeps the
-#'   SCOPE default.
+#'   metric (set automatically) took about a quarter of the time. But the centered
+#'   form funnels when any donor variance is near zero: in the 2026-11-02 pilot,
+#'   null and dependence-only truths (no donor variation in the induced effect) gave
+#'   R-hat up to 1.4 and bulk ESS below 30, and fitting `donor_visit = TRUE` to data
+#'   without donor-by-visit variation gave R-hat 1.23. `FALSE` (default) is the safe
+#'   choice; use `TRUE` only as a speed option when donor variation is clearly present.
 #' @param ... Passed to the CmdStanModel `$sample()` method (for example
 #'   `adapt_delta`). Defaults: `refresh = 0`, `parallel_chains = min(chains, 4)`,
 #'   `metric = "dense_e"` if `centered` else `"diag_e"`, `sig_figs = 18` (so probabilities sum to one to machine precision).

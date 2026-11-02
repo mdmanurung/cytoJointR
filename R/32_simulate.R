@@ -48,7 +48,7 @@ m1_default_truth <- function(d) {
 #' @export
 cj_simulate_counts <- function(n_donors = 12L, markers = c("IFNG", "TNF"),
                                stimulations = "CMV", visits = "v1", N = 10000L,
-                               truth = list(), donor_effects = TRUE, donor_visit = FALSE,
+                               truth = list(), donor_effects = TRUE, donor_visit = TRUE,
                                missing_control = 0, seed = 1L) {
   set.seed(seed)
   bits <- cj_bits(markers)

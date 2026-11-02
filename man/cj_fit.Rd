@@ -35,8 +35,12 @@ fixed-effects-only model.}
 instead of the noncentered default. Both give the same posterior. With many
 cells per sample (data-dominated donors) the noncentered form needs very small
 steps; in a J = 3, 24-donor, 10 000-cell benchmark the centered form with a dense
-metric (set automatically) took about a quarter of the time. \code{FALSE} keeps the
-SCOPE default.}
+metric (set automatically) took about a quarter of the time. But the centered
+form funnels when any donor variance is near zero: in the 2026-11-02 pilot,
+null and dependence-only truths (no donor variation in the induced effect) gave
+R-hat up to 1.4 and bulk ESS below 30, and fitting \code{donor_visit = TRUE} to data
+without donor-by-visit variation gave R-hat 1.23. \code{FALSE} (default) is the safe
+choice; use \code{TRUE} only as a speed option when donor variation is clearly present.}
 
 \item{...}{Passed to the CmdStanModel \verb{$sample()} method (for example
 \code{adapt_delta}). Defaults: \code{refresh = 0}, \code{parallel_chains = min(chains, 4)},

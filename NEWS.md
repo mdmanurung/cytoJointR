@@ -18,3 +18,8 @@
   contribution bars. IPF failures are flagged per draw, never dropped.
 * `cj_compass()`: runs native COMPASS per stimulation x visit x parent
   population and returns the native `COMPASSResult` objects.
+* `cj_simulate_counts()` now defaults to `donor_visit = TRUE`, matching
+  `cj_fit()`; the old mismatch gave R-hat 1.09 when users copied the pattern.
+* Pilot benchmark (2026-11-02): good recovery when data come from M1, but
+  coverage collapses under logistic-normal donor heterogeneity (RMS 0.23).
+  See IMPLEMENTATION_STATUS.md, "Main limitation".

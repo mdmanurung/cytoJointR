@@ -38,18 +38,61 @@ Test files are in `tests/testthat/`.
 | 5 | COMPASS posterior differences | PARTIAL | not wrapped; `COMPASS::PosteriorDiff()` runs on `cj_compass()$fits` and is not tested here |
 | 6 | Static ggplot2 plots | DONE | forest, response heatmap, contribution bars in `test-scores.R` |
 | 6 | ComplexHeatmap output | PARTIAL | plots are ggplot2; ComplexHeatmap is only a Suggests entry and is not used |
-| - | Pilot benchmark | NOT_RUN | running separately; no result is claimed here |
+| - | Pilot benchmark | PARTIAL | 13 of 21 scenarios x 30 seeds run; see "Pilot results" below |
 
 ## Known blockers
 
 * `cj_from_gatingset()` has never run. flowWorkspace segfaults on the
   development host, even after its dependency chain was rebuilt from source.
 * The polyICSFlow adapter is tested only on a hand-built table.
-* The pilot benchmark runs in the reproducibility folder. Parameter recovery,
-  score bias and interval coverage at scale are not claimed.
 * CI has never run because the repository has no remote.
 * The default priors in `cj_default_priors()` are illustrative smoke-test
   values, not validated.
+
+## Pilot results (2026-11-02)
+
+Source: `cytoJointR-reproducibility/runs/2026-11-02_pilot/` (its README pins
+the commits and deviations). 30 seeds per scenario; coverage of 90% intervals,
+binomial Monte Carlo SE about 0.05 at 30 seeds. One pilot, not confirmation.
+
+* **Generator A (data from M1 itself), RMS coverage 0.90-0.99** across null,
+  positive margins, negative margins, dependence-only and visit change, at 24
+  and 100 donors, J = 3. Bias within about 3e-3.
+* **Under-coverage to watch:** CPS 0.82 and CCS 0.80 (SE 0.07) for
+  dependence-only at 24 donors; CCS 0.84 for null. Observation, not conclusion.
+* **False sign rate** (P(delta > epsilon) > 0.95 while truth <= 0): 0 to 0.007
+  for generator A.
+* **Donor-by-visit ablation:** dropping `u_iv` collapses visit-change coverage
+  (donor-level RMS 0.03 vs 0.89-0.90 for the full model).
+* **COMPASS on the same data (seeds 1-5):** FS/PFS saturate near 1 for any
+  positive effect; rank correlation with true RMS 0.56-0.79 (-0.14 at J = 4).
+  cytoJointR RMS correlates 0.94-1.00 with truth.
+* **Mixing:** 0-5 of 30 replicates per scenario flagged (R-hat > 1.01, ESS < 400
+  or a divergence), all kept in the metrics. Dependence-only J = 4 hit max
+  treedepth in 29 of 30 fits; treedepth was not a flag criterion.
+* **Fit time:** median 30-150 s at 24 donors, 500-1300 s at 100 donors (N = 10 000).
+* **Not run:** J = 4 at 100 donors; J = 4 at 24 donors for null, negative
+  margins and visit change.
+
+## Main limitation: donor heterogeneity beyond the model
+
+**Under generator B (logistic-normal pattern probabilities, heterogeneous
+donors), coverage collapses: RMS 0.23 (SE 0.08), CPS 0.07, CCS 0.14, and the
+CCS false sign rate is 0.19.** M1 gives donors one shared basal and one induced
+effect with unit loadings across markers, so donor variation that is
+marker-specific or pattern-specific is pooled away and intervals are far too
+narrow. This is the over-pooling risk the design bundle named (doc 14). Real
+data will usually look more like generator B than generator A. Candidate
+fixes, not yet built: marker-specific donor effects, or sample-level
+overdispersion (for example a per-sample pattern random effect).
+
+## Parameterisation
+
+Default is noncentered. `centered = TRUE` is a speed option: it funnels when a
+donor variance is near zero (pilot: R-hat up to 1.4 for null truths; 1.23 when
+`donor_visit = TRUE` meets data without donor-by-visit variation). In the pilot
+noncentered fits at 100 donors (median 503-643 s) were not slower than centered
+ones (1020-1322 s, different scenarios).
 
 ## Deferred (from SCOPE)
 

@@ -12,7 +12,7 @@ cj_simulate_counts(
   N = 10000L,
   truth = list(),
   donor_effects = TRUE,
-  donor_visit = FALSE,
+  donor_visit = TRUE,
   missing_control = 0,
   seed = 1L
 )

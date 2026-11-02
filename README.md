@@ -39,6 +39,12 @@ cj_plot_forest(sc, score = c("RMS", "CCS"))
 
 ## Scope status
 
+**Limitation:** in the 2026-11-02 pilot, intervals were well calibrated when
+data came from the model itself, but far too narrow (RMS coverage 0.23 of a
+nominal 0.90) when donors varied in marker-specific ways. Treat intervals on
+real data as optimistic until that is fixed.
+
+
 This is a development version (v0.1 in progress). The input layer,
 descriptive layer, M1 count model, score layer, visit change and the COMPASS
 adapter are implemented and tested. `cj_from_gatingset()` has never run, the

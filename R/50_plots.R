@@ -27,7 +27,7 @@ pattern_order <- function(p) {
 #' cj_plot_forest(cj_scores(d, eps), score = c("RMS", "CCS"))
 cj_plot_forest <- function(scores, score = c("RMS", "poly_absolute", "CPS", "CCS")) {
   s <- scores[scores$score %in% score, ]
-  s$panel <- ifelse(is.na(s$marker), s$score, paste0(s$score, ": ", s$marker))
+  s$panel <- ifelse(is.na(s$marker), score_label(s$score), paste0(s$score, ": ", s$marker))
   n_na <- length(unique(s$contrast_id[s$status == "unavailable"]))
   n_fail <- length(unique(s$contrast_id[s$status == "failure_tolerance_exceeded"]))
   s <- s[!s$status %in% c("unavailable", "failure_tolerance_exceeded") & !is.na(s$estimate), ]
@@ -56,6 +56,11 @@ pattern_plot_data <- function(patterns, score) {
   patterns
 }
 
+# Title naming the score, only when it is experimental (NULL draws no title).
+plot_score_title <- function(pd) {
+  if (any(pd$score %in% SCORE_EXPERIMENTAL)) paste(unique(score_label(pd$score)), collapse = ", ")
+}
+
 #' Donor by pattern heatmap
 #'
 #' Rows are exact patterns with full state labels, ordered by degree (highest
@@ -81,7 +86,7 @@ cj_plot_response_heatmap <- function(patterns, value = c("p_positive", "estimate
                                         fill = .data[[value]])) +
     ggplot2::geom_tile() +
     ggplot2::facet_grid(~ stimulation + visit, scales = "free_x", space = "free_x") +
-    ggplot2::labs(x = "donor", y = NULL)
+    ggplot2::labs(x = "donor", y = NULL, title = plot_score_title(pd))
   if (value == "p_positive")
     return(g + ggplot2::scale_fill_viridis_c(limits = c(0, 1), name = "P(contribution > epsilon)"))
   m <- max(abs(pd$estimate), na.rm = TRUE)
@@ -113,5 +118,6 @@ cj_plot_contributions <- function(patterns, score = NULL, contrast = NULL) {
     ggplot2::geom_vline(xintercept = 0) +
     ggplot2::scale_fill_manual(values = c(negative = "#b2182b", positive = "#2166ac")) +
     ggplot2::facet_wrap(~ contrast_id) +
-    ggplot2::labs(x = "signed contribution to the global score", y = NULL, fill = NULL)
+    ggplot2::labs(x = "signed contribution to the global score", y = NULL, fill = NULL,
+                  title = plot_score_title(pd))
 }

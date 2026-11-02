@@ -11,6 +11,12 @@ SCORE_UNITS <- c(RMS = "fraction", poly_absolute = "fraction", poly_marginal = "
                  CPS = "conditional fraction", CCS = "fraction",
                  breadth = "functions per positive cell", marker_magnitude = "fraction")
 
+# Scores whose intervals are not calibrated under donor heterogeneity (generator B
+# coverage at most 0.34). They get `experimental = TRUE` and the label below.
+SCORE_EXPERIMENTAL <- "CCS"
+CCS_NOTE <- "CCS is experimental: not calibrated under donor heterogeneity; see IMPLEMENTATION_STATUS.md"
+score_label <- function(score) ifelse(score %in% SCORE_EXPERIMENTAL, paste0(score, " (experimental)"), score)
+
 # Accept a cj_draws or a cj_fit; return the cj_draws.
 as_draws <- function(x) {
   if (inherits(x, "cj_fit")) return(x$draws)
@@ -162,9 +168,10 @@ contrast_keys <- function(ct) {
 #'
 #' @param x A `cj_draws` or `cj_fit`.
 #' @return A data frame with columns `draw_id`, `contrast_id`, `score`,
-#'   `marker` (only for `marker_magnitude`), `value`, `status`. Scores are
-#'   `RMS`, `poly_absolute`, `poly_marginal`, `CPS`, `CCS`, `breadth` and
-#'   `marker_magnitude`. Values are signed and never clipped.
+#'   `marker` (only for `marker_magnitude`), `value`, `status`, `experimental`.
+#'   Scores are `RMS`, `poly_absolute`, `poly_marginal`, `CPS`, `CCS`, `breadth` and
+#'   `marker_magnitude`. Values are signed and never clipped. `experimental` is
+#'   `TRUE` for `CCS`, which is not calibrated under donor heterogeneity.
 #' @export
 #' @examples
 #' d <- cj_example_draws(n_draw = 20)
@@ -173,7 +180,7 @@ cj_score_draws <- function(x) {
   d <- as_draws(x)
   eng <- score_engine(d)
   nd <- dim(d$p)[1]
-  do.call(rbind, lapply(names(eng), function(id) {
+  out <- do.call(rbind, lapply(names(eng), function(id) {
     e <- eng[[id]]
     sc <- split_score_col(e$cols)
     n <- length(e$cols)
@@ -183,6 +190,8 @@ cj_score_draws <- function(x) {
       value = if (e$available) as.vector(e$G) else NA_real_,
       status = if (e$available) rep(e$status, times = n) else "unavailable")
   }))
+  out$experimental <- out$score %in% SCORE_EXPERIMENTAL
+  out
 }
 
 # Summarise the columns of G (draws x scores) into one row per column.
@@ -229,7 +238,10 @@ summarise_columns <- function(cols, G, bad, eps, level, max_failure) {
 #'   `estimate`, `lower`, `upper`, `epsilon`, `p_positive`, `p_negative`,
 #'   `p_negligible`, `n_draws`, `n_failed`, `failure_fraction`, `status`
 #'   (`ok`, `ok_with_failed_draws`, `failure_tolerance_exceeded`,
-#'   `unavailable`) and `units`.
+#'   `unavailable`), `units` and `experimental`. `experimental` is `TRUE` for
+#'   `CCS`, and a call that returns `CCS` rows emits one message saying so:
+#'   CCS is not calibrated under donor heterogeneity (see
+#'   `IMPLEMENTATION_STATUS.md`). Silence it with [suppressMessages()].
 #' @export
 #' @examples
 #' d <- cj_example_draws(n_draw = 100)
@@ -241,13 +253,16 @@ cj_scores <- function(x, epsilon, level = 0.9, max_failure = 0.01) {
   check_epsilon(epsilon, c(GLOBAL_SCORES, "marker_magnitude"))
   eng <- score_engine(d)
   keys <- contrast_keys(d$contrasts)
-  do.call(rbind, lapply(seq_along(eng), function(i) {
+  out <- do.call(rbind, lapply(seq_along(eng), function(i) {
     e <- eng[[i]]
     bad <- if (e$available) e$status != "ok"
     cbind(keys[i, ], summarise_columns(e$cols, e$G, bad, epsilon[split_score_col(e$cols)$score], level,
                       max_failure),
           row.names = NULL)
   }))
+  out$experimental <- out$score %in% SCORE_EXPERIMENTAL
+  if (any(out$experimental)) message(CCS_NOTE)
+  out
 }
 
 #' Marker-wise magnitude views (overlapping)
@@ -301,8 +316,9 @@ cj_markers <- function(x, epsilon, level = 0.9, max_failure = 0.01) {
 #' @return A data frame, one row per contrast, score and pattern, with the
 #'   full state label `pattern`, `degree`, posterior means `p_U_mean` and
 #'   `p_S_mean`, `estimate`, `lower`, `upper`, the epsilon probabilities and
-#'   `status`. For a `cj_fit` it also has the raw counts `n_U`, `n_S` and the
-#'   parent totals `N_U`, `N_S`.
+#'   `status` and `experimental` (`TRUE` for `CCS`, which is not calibrated under
+#'   donor heterogeneity). For a `cj_fit` it also has the raw counts `n_U`, `n_S`
+#'   and the parent totals `N_U`, `N_S`.
 #' @export
 #' @examples
 #' pt <- cj_patterns(cj_example_draws(n_draw = 50), "RMS", c(RMS = 0.005))
@@ -348,6 +364,7 @@ cj_patterns <- function(x, score = c("RMS", "CPS", "CCS"), epsilon, level = 0.9,
     o
   }))
   if (!inherits(x, "cj_fit")) out[c("n_U", "n_S", "N_U", "N_S")] <- NULL
+  out$experimental <- out$score %in% SCORE_EXPERIMENTAL
   out[order(out$contrast_id, out$score, out$degree, out$pattern), ]
 }
 

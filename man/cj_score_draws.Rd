@@ -11,9 +11,10 @@ cj_score_draws(x)
 }
 \value{
 A data frame with columns \code{draw_id}, \code{contrast_id}, \code{score},
-\code{marker} (only for \code{marker_magnitude}), \code{value}, \code{status}. Scores are
-\code{RMS}, \code{poly_absolute}, \code{poly_marginal}, \code{CPS}, \code{CCS}, \code{breadth} and
-\code{marker_magnitude}. Values are signed and never clipped.
+\code{marker} (only for \code{marker_magnitude}), \code{value}, \code{status}, \code{experimental}.
+Scores are \code{RMS}, \code{poly_absolute}, \code{poly_marginal}, \code{CPS}, \code{CCS}, \code{breadth} and
+\code{marker_magnitude}. Values are signed and never clipped. \code{experimental} is
+\code{TRUE} for \code{CCS}, which is not calibrated under donor heterogeneity.
 }
 \description{
 Evaluates every score within each posterior draw, using the stimulated

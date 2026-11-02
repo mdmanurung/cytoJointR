@@ -119,3 +119,29 @@ test_that("the forest caption counts unavailable and failure-tolerance contrasts
                "Not shown: unavailable (no control sample) 1; failed-draw tolerance exceeded 1")
   expect_false(any(c("D1_v1_CD4_CMV", "D2_v1_CD4_CMV") %in% pl$data$contrast_id))
 })
+
+test_that("CCS rows are flagged experimental in scores, draws and patterns", {
+  d <- cj_example_draws(n_draw = 20)
+  sc <- suppressMessages(cj_scores(d, EPS))
+  sd <- cj_score_draws(d)
+  pt <- cj_patterns(d, c("RMS", "CCS"), EPS)
+  for (o in list(sc, sd, pt)) expect_identical(o$experimental, o$score == "CCS")
+})
+
+test_that("cj_scores emits one experimental-CCS message per call", {
+  d <- cj_example_draws(n_draw = 20)
+  msgs <- character()
+  withCallingHandlers(cj_scores(d, EPS),
+                      message = function(m) { msgs <<- c(msgs, conditionMessage(m)); invokeRestart("muffleMessage") })
+  expect_length(msgs, 1L)
+  expect_match(msgs, "CCS is experimental: not calibrated under donor heterogeneity; see IMPLEMENTATION_STATUS.md", fixed = TRUE)
+})
+
+test_that("plots label CCS as experimental", {
+  d <- cj_example_draws(n_draw = 20)
+  f <- cj_plot_forest(suppressMessages(cj_scores(d, EPS)), score = c("RMS", "CCS"))
+  expect_setequal(unique(f$data$panel), c("RMS", "CCS (experimental)"))
+  pt <- cj_patterns(d, "CCS", EPS)
+  expect_equal(cj_plot_contributions(pt)$labels$title, "CCS (experimental)")
+  expect_null(cj_plot_contributions(cj_patterns(d, "RMS", EPS))$labels$title)
+})

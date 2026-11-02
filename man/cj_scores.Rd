@@ -24,7 +24,10 @@ A data frame, one row per contrast, score and marker, with
 \code{estimate}, \code{lower}, \code{upper}, \code{epsilon}, \code{p_positive}, \code{p_negative},
 \code{p_negligible}, \code{n_draws}, \code{n_failed}, \code{failure_fraction}, \code{status}
 (\code{ok}, \code{ok_with_failed_draws}, \code{failure_tolerance_exceeded},
-\code{unavailable}) and \code{units}.
+\code{unavailable}), \code{units} and \code{experimental}. \code{experimental} is \code{TRUE} for
+\code{CCS}, and a call that returns \code{CCS} rows emits one message saying so:
+CCS is not calibrated under donor heterogeneity (see
+\code{IMPLEMENTATION_STATUS.md}). Silence it with \code{\link[=suppressMessages]{suppressMessages()}}.
 }
 \description{
 Posterior mean, equal-tailed interval and the three epsilon probabilities

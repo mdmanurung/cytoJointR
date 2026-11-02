@@ -73,8 +73,16 @@ enters the likelihood even when its visit has no control sample.
 \code{model = "m1dm"} (default) adds a sample-level residual: counts are
 Dirichlet-multinomial, \code{y_s ~ DM(phi * mu_s)} with \code{mu_s = softmax(eta_s)} and
 \code{inv_phi = 1 / phi ~ half-normal(0, inv_phi_sd)}. As \code{inv_phi -> 0} this is
-\code{model = "m1"}, the multinomial model with no sample residual. The default may
-change once the model comparison is decided.
+\code{model = "m1"}, the multinomial model with no sample residual; keep it for
+ablation.
+
+Why \code{"m1dm"} is the default: in the 2026-11-02 benchmark (545 replicates, 18
+cells) the pre-registered rule found no calibrated model, so the choice is post
+hoc. \code{"m1"} under-covers (CPS 0.24 to 0.79 in cells it failed), while \code{"m1dm"}
+errs the other way: its CPS intervals are conservative. Both keep RMS coverage
+inside the band in every cell. See \code{docs/adr/0002-default-model-m1dm.md}. CCS is
+experimental under either model, because no model covered it under donor
+heterogeneity.
 
 Two kinds of probability are available. \code{level = "sample"} (default) returns the
 realised sample probabilities \code{p_s | y_s ~ Dirichlet(phi * mu_s + y_s)} in

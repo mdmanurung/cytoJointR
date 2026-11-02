@@ -27,8 +27,9 @@ cj_patterns(
 A data frame, one row per contrast, score and pattern, with the
 full state label \code{pattern}, \code{degree}, posterior means \code{p_U_mean} and
 \code{p_S_mean}, \code{estimate}, \code{lower}, \code{upper}, the epsilon probabilities and
-\code{status}. For a \code{cj_fit} it also has the raw counts \code{n_U}, \code{n_S} and the
-parent totals \code{N_U}, \code{N_S}.
+\code{status} and \code{experimental} (\code{TRUE} for \code{CCS}, which is not calibrated under
+donor heterogeneity). For a \code{cj_fit} it also has the raw counts \code{n_U}, \code{n_S}
+and the parent totals \code{N_U}, \code{N_S}.
 }
 \description{
 Each exact pattern's signed contribution to RMS, CPS or CCS, per contrast.

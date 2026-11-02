@@ -27,12 +27,12 @@ test_that("a shared control sample gives each contrast the same draw", {
 
 test_that("an IPF failure is flagged and kept, not dropped", {
   d <- cj_example_draws(n_draw = 20)
-  real <- cytoJointR::cj_counterfactual
-  n <- 0
-  testthat::local_mocked_bindings(cj_counterfactual = function(...) {
-    n <<- n + 1
-    if (n %% 5 == 0) stop("IPF failed to converge")
-    real(...)
+  real <- cytoJointR:::ipf_draws
+  # Every 5th draw fails IPF in every contrast.
+  testthat::local_mocked_bindings(ipf_draws = function(...) {
+    r <- real(...)
+    r$ok[seq_along(r$ok) %% 5 == 0] <- FALSE
+    r
   })
   sd <- cj_score_draws(d)
   expect_equal(nrow(sd), 20 * 12 * 9)  # nothing dropped: 12 contrasts, 9 score columns

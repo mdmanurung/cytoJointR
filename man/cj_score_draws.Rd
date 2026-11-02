@@ -19,7 +19,7 @@ A data frame with columns \code{draw_id}, \code{contrast_id}, \code{score},
 Evaluates every score within each posterior draw, using the stimulated
 sample and its control sample from the same draw. A control shared by
 several stimulations therefore gives identical draws to each of its
-contrasts. The counterfactual (IPF) is recomputed in every draw.
+contrasts. The counterfactual (IPF) is solved in every draw.
 }
 \details{
 A draw whose computation fails is kept as a row with \code{status} \code{"ipf_failed"}

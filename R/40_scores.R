@@ -1,6 +1,6 @@
 # Score layer: per-draw net scores for every contrast, and their summaries.
-# All score algebra comes from cj_score_reference() (one call per draw, one
-# IPF per draw); this file only loops over draws and summarises.
+# The score algebra of cj_score_reference() is vectorised over draws in
+# score_contrast() (tested equal to it); this file also summarises.
 # Docs: docs/04_SCORE_CONTRACT.md, 06_ATTRIBUTION_AND_OUTPUTS.md, 07_UNCERTAINTY_AND_GROUPS.md.
 
 GLOBAL_SCORES <- c("RMS", "poly_absolute", "poly_marginal", "CPS", "CCS", "breadth")
@@ -40,36 +40,106 @@ check_epsilon <- function(epsilon, needed) {
 
 # Per-draw engine -----------------------------------------------------------
 
+# IPF on all draws at once: Pu, Ps are [draw x pattern], rows sum to 1.
+# Same algorithm and tolerance as cj_counterfactual(); a draw stops updating
+# at the sweep where it converges, so results match the scalar path. Returns
+# Q [draw x pattern] and ok [draw]; ok is FALSE where the scalar path errors
+# (invalid input, non-interior margins, no support, no convergence).
+ipf_draws <- function(Pu, Ps, bits, tol = 1e-10, max_iter = 10000L) {
+  nd <- nrow(Pu); J <- ncol(bits)
+  target <- Ps %*% bits
+  ok <- rowSums(!(is.finite(Pu) & Pu > 0) | !(is.finite(Ps) & Ps > 0)) == 0L
+  ok <- ok & rowSums(!(target > 0 & target < 1)) == 0L
+  Q <- Pu
+  act <- which(ok)
+  for (iter in seq_len(max_iter)) {
+    if (!length(act)) break
+    Qa <- Q[act, , drop = FALSE]; ta <- target[act, , drop = FALSE]
+    bad <- rep(FALSE, length(act))
+    for (j in seq_len(J)) {
+      plus <- bits[, j] == 1L
+      a <- rowSums(Qa[, plus, drop = FALSE])
+      bad <- bad | !(a > 0 & a < 1)
+      a[bad] <- 0.5
+      Qa[, plus] <- Qa[, plus] * ta[, j] / a
+      Qa[, !plus] <- Qa[, !plus] * (1 - ta[, j]) / (1 - a)
+      Qa <- Qa / rowSums(Qa)
+    }
+    bad <- bad | rowSums(!is.finite(Qa)) > 0L
+    done <- !bad & rowSums(abs(Qa %*% bits - ta) >= tol) == 0L
+    Q[act, ] <- Qa
+    ok[act[bad]] <- FALSE
+    act <- act[!bad & !done]
+  }
+  ok[act] <- FALSE  # still iterating at max_iter
+  list(Q = Q, ok = ok)
+}
+
+# cj_score_reference() algebra for all draws of one contrast. Returns G
+# [draw x score column], status per draw and (keep_patterns) contrib
+# [draw x pattern x RMS/CPS/CCS]. Failed-IPF draws stay as NA rows.
+score_contrast <- function(Pu, Ps, bits, keep_patterns = FALSE) {
+  Pu <- Pu / rowSums(Pu); Ps <- Ps / rowSums(Ps)
+  ipf <- ipf_draws(Pu, Ps, bits)
+  deg <- rowSums(bits); pos <- deg >= 1L; poly <- deg >= 2L
+  dp <- Ps - Pu
+  q_u <- rowSums(Pu[, pos, drop = FALSE]); q_s <- rowSums(Ps[, pos, drop = FALSE])
+  cps <- Ps / q_s - Pu / q_u
+  ccs <- Ps - ipf$Q
+  sub <- function(M, keep) rowSums(M[, keep, drop = FALSE])
+  G <- cbind(RMS = sub(dp, pos), poly_absolute = sub(dp, poly),
+             poly_marginal = sub(ipf$Q - Pu, poly), CPS = sub(cps, poly),
+             CCS = sub(ccs, poly), breadth = rowSums(sweep(cps, 2L, deg, `*`)),
+             dp %*% bits)
+  colnames(G)[-(1:6)] <- paste0("marker_magnitude:", colnames(bits))
+  G[!ipf$ok, ] <- NA_real_
+  status <- ifelse(ipf$ok, "ok", "ipf_failed")
+  status[ipf$ok & rowSums(!is.finite(G)) > 0L] <- "score_failed"
+  contrib <- NULL
+  if (keep_patterns) {
+    mask <- function(M, keep) { M[, !keep] <- 0; M }
+    contrib <- array(NA_real_, c(nrow(Pu), nrow(bits), 3L),
+                     dimnames = list(NULL, pattern_labels(bits), CONTRIBUTION_SCORES))
+    contrib[, , "RMS"] <- mask(dp, pos)
+    contrib[, , "CPS"] <- mask(cps, poly)
+    contrib[, , "CCS"] <- mask(ccs, poly)
+    contrib[!ipf$ok, , ] <- NA_real_
+  }
+  list(G = G, status = status, contrib = contrib)
+}
+
 # For each contrast: G [draw x score column] and per-draw failure status.
 # With keep_patterns, also contrib [draw x pattern x RMS/CPS/CCS].
-# ponytail: a plain loop over draws; vectorise IPF across draws if 1e4+ draws x
-# many contrasts becomes slow (see cost note in the package report).
+# Memoised on the last input: cj_scores(), cj_patterns(), cj_markers() and
+# cj_visit_change() on the same draws share one pass.
+# ponytail: single-slot cache; use a keyed cache if alternating objects matter.
+.engine_cache <- new.env(parent = emptyenv())
+
 score_engine <- function(d, keep_patterns = FALSE) {
+  hit <- .engine_cache$val
+  same <- !is.null(hit) && identical(hit$p, d$p) && identical(hit$bits, d$bits) &&
+    identical(hit$contrasts, d$contrasts) && identical(hit$samples, d$samples)
+  if (same && (hit$keep || !keep_patterns)) return(hit$eng)
+  eng <- compute_engine(d, keep_patterns)
+  assign("val", list(p = d$p, bits = d$bits, contrasts = d$contrasts,
+                     samples = d$samples, keep = keep_patterns, eng = eng),
+         envir = .engine_cache)
+  eng
+}
+
+compute_engine <- function(d, keep_patterns) {
   p <- d$p
-  nd <- dim(p)[1]
   ct <- d$contrasts
   s_row <- match(ct$stim_sample_id, d$samples$sample_id)
   u_row <- match(ct$control_sample_id, d$samples$sample_id)
   cols <- c(GLOBAL_SCORES, paste0("marker_magnitude:", d$markers))
   out <- lapply(seq_len(nrow(ct)), function(i) {
     if (is.na(u_row[i])) return(list(available = FALSE, cols = cols))
-    G <- matrix(NA_real_, nd, length(cols), dimnames = list(NULL, cols))
-    status <- rep("ok", nd)
-    contrib <- if (keep_patterns)
-      array(NA_real_, c(nd, nrow(d$bits), 3L),
-            dimnames = list(NULL, pattern_labels(d$bits), CONTRIBUTION_SCORES))
-    for (k in seq_len(nd)) {
-      # The control row is read from the same draw k as the stimulated row.
-      p_u <- unname(p[k, u_row[i], ]); p_s <- unname(p[k, s_row[i], ])
-      ref <- tryCatch(cj_score_reference(p_u / sum(p_u), p_s / sum(p_s), d$bits),
-                      error = function(e) conditionMessage(e))
-      if (is.character(ref)) { status[k] <- "ipf_failed"; next }
-      G[k, ] <- c(ref$global[GLOBAL_SCORES], ref$markers$magnitude)
-      if (keep_patterns) contrib[k, , ] <- as.matrix(ref$patterns[, CONTRIBUTION_SCORES])
-    }
-    bad <- status != "ok" | !apply(is.finite(G), 1L, all)
-    status[bad & status == "ok"] <- "score_failed"
-    list(available = TRUE, cols = cols, G = G, status = status, contrib = contrib)
+    # The control row is read from the same draw as the stimulated row.
+    r <- score_contrast(matrix(p[, u_row[i], ], dim(p)[1L]),
+                        matrix(p[, s_row[i], ], dim(p)[1L]), d$bits, keep_patterns)
+    colnames(r$G) <- cols
+    c(list(available = TRUE, cols = cols), r)
   })
   names(out) <- ct$contrast_id
   out
@@ -84,7 +154,7 @@ contrast_keys <- function(ct) {
 #' Evaluates every score within each posterior draw, using the stimulated
 #' sample and its control sample from the same draw. A control shared by
 #' several stimulations therefore gives identical draws to each of its
-#' contrasts. The counterfactual (IPF) is recomputed in every draw.
+#' contrasts. The counterfactual (IPF) is solved in every draw.
 #'
 #' A draw whose computation fails is kept as a row with `status` `"ipf_failed"`
 #' (or `"score_failed"`) and `value` `NA`; it is never dropped. A contrast with

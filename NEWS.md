@@ -1,4 +1,4 @@
-# cytoJointR (development version)
+# cytoJointR 0.0.0.9000
 
 * Package started from the unified design bundle of 2026-11-01. Reference
   utilities (`cj_bits`, `cj_compress`, likelihood, IPF counterfactual,

@@ -6,3 +6,4 @@
 ^IMPLEMENTATION_STATUS\.md$
 ^\.github$
 ^_site$
+^\.git$

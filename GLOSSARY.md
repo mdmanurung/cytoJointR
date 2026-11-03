@@ -27,6 +27,14 @@ _Avoid_: treatment, antigen, condition
 The unstimulated aliquot of a donor at a visit; it may serve several stimulations.
 _Avoid_: unstim, background sample, negative control
 
+**Missing control**:
+A stimulated sample with no control sample at its visit. Net scores stay
+unavailable. COMPASS can still run it (`cj_compass(missing_control = )`): with
+the same donor's control from the nearest other visit (`"donor"`), or against
+the population control of the other donors (`"population"`); `control_source`
+says which.
+_Avoid_: unpaired sample, orphan
+
 **Contrast**:
 One stimulated sample paired with its control sample; the unit a net score describes.
 _Avoid_: pair, comparison

@@ -143,6 +143,20 @@ cp <- cj_run_compass(x, iterations = 200, replications = 2, seed = 1)
 head(cp[c("donor_id", "compass_FS", "compass_PFS")], 4)
 ```
 
+A stimulated sample without a control is dropped by default. Set
+`missing_control = "donor"` to borrow the same donor's control from the nearest
+other visit, or `"population"` to compare the sample with the other donors'
+controls (COMPASS integrates out each donor's control proportions, so a zero
+control row contributes nothing). The `control_source` column says which rows
+were not paired. A borrowed control assumes the background does not change
+between visits, and the population control assumes this donor's background is
+like the others'; see `docs/adr/0003-compass-missing-control.md` for the
+simulation behind these cautions.
+
+```{r compass-missing, eval = FALSE}
+cj_run_compass(x, missing_control = "donor", iterations = 200, replications = 2)
+```
+
 `cj_run_polyicsflow()` runs polyICSFlow's marker-combination and
 background-subtraction functions on the same counts. polyICSFlow clips each
 pattern at zero, so `polyics_net_any` is not the signed net percent of

@@ -22,6 +22,9 @@ as_cj_data <- function(x, markers, samples, gate, transform, control, ...) {
 #' @param x A `cj_data`, a `cj_fit`, or a cell data frame.
 #' @param markers,samples,gate,transform,control Used only when `x` is a cell
 #'   data frame; see [cj_from_cells()]. `samples` is required then.
+#' @param missing_control What to do with stimulated samples that have no
+#'   control: `"drop"` (default), `"donor"` or `"population"`; see [cj_compass()].
+#'   The table gets `control_source` and `control_fallback`.
 #' @param ... Passed to [cj_compass()] (for example `iterations`, `replications`,
 #'   `seed`).
 #' @param gate_args List of extra arguments for [cj_gate()] (for example
@@ -41,15 +44,16 @@ as_cj_data <- function(x, markers, samples, gate, transform, control, ...) {
 #'                iterations = 200, replications = 2)
 #' }
 cj_run_compass <- function(x, markers = NULL, samples = NULL, gate = NULL, transform = NULL,
-                           control = "control", ..., gate_args = list()) {
+                           control = "control", missing_control = c("drop", "donor", "population"),
+                           ..., gate_args = list()) {
   if (!has_pkg("COMPASS")) stop("cj_run_compass() needs the COMPASS package", call. = FALSE)
   d <- do.call(as_cj_data, c(list(x, markers, samples, gate, transform, control), gate_args))
-  cc <- cj_compass(d, ...)
+  cc <- cj_compass(d, missing_control = match.arg(missing_control), ...)
   out <- cc$scores
   attr(out, "compass") <- cc
   attr(out, "excluded") <- cc$excluded
   if (nrow(cc$excluded))
-    message(nrow(cc$excluded), " contrast(s) without a control sample were not run through COMPASS")
+    message(nrow(cc$excluded), " contrast(s) were not run through COMPASS (see attr(, \"excluded\") for the reason)")
   out
 }
 

@@ -4,7 +4,13 @@
 \alias{cj_compass}
 \title{Fit COMPASS to a cytoJointR data set}
 \usage{
-cj_compass(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FALSE, ...)
+cj_compass(
+  x,
+  category_filter = COMPASS_DEFAULT_FILTER,
+  verbose = FALSE,
+  missing_control = c("drop", "donor", "population"),
+  ...
+)
 }
 \arguments{
 \item{x}{A \code{cj_data} (or a \code{cj_fit}, whose \code{data} is used).}
@@ -13,13 +19,18 @@ cj_compass(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FALSE, ...)
 
 \item{verbose}{Show COMPASS's console output.}
 
+\item{missing_control}{What to do with a stimulated sample that has no control
+sample at its visit: \code{"drop"}, \code{"donor"} or \code{"population"}. See \emph{Missing
+control samples}.}
+
 \item{...}{Passed to \code{COMPASS::SimpleCOMPASS()}, e.g. \code{iterations},
 \code{replications}, \code{seed}. COMPASS's defaults apply when omitted.}
 }
 \value{
 A \code{cj_compass} list with \code{fits} (named list of \code{COMPASSResult}),
 \code{scores} (tidy table with \code{compass_FS}, \code{compass_PFS},
-\code{compass_response_degree1}, \code{compass_response_degree2}), \code{groups} (one
+\code{compass_response_degree1}, \code{compass_response_degree2}, \code{control_source},
+\code{control_fallback}), \code{groups} (one
 row per COMPASS run with its status), \code{filters} (what the category filter
 removed per run) and \code{excluded} (contrasts left out, with the reason).
 }
@@ -31,8 +42,9 @@ population, using each donor's stimulated and control sample as the
 \code{COMPASS::PosteriorDiff()}, \code{plot()}, ...) works on them.
 }
 \details{
-Contrasts without a control sample cannot enter COMPASS; they are listed in
-\code{excluded}. \code{SimpleCOMPASS()} has no category filter, so the adapter applies
+By default (\code{missing_control = "drop"}) contrasts without a control sample
+cannot enter COMPASS; they are listed in \code{excluded}. The other two settings
+keep them (see below). \code{SimpleCOMPASS()} has no category filter, so the adapter applies
 COMPASS's own default from \code{COMPASS::COMPASS()},
 \code{function(x) colSums(x > 5) > 2} on the stimulated counts, and moves removed
 patterns' cells to the all-negative pattern as COMPASS does. What was removed
@@ -44,6 +56,33 @@ the cell subsets with at least that many markers, of the posterior
 probability that the subset responds. They are not cytoJointR sign probabilities and should not be
 compared with \code{p_positive} as if they were.
 }
+\section{Missing control samples}{
+
+COMPASS integrates out each donor's control proportions, so an all-zero
+\code{n_u} row adds nothing to the likelihood and that donor's stimulated counts
+are compared with the population control distribution that the other donors
+define. \code{missing_control} chooses what a stimulated sample without a control
+of its own visit gets:
+\itemize{
+\item \code{"drop"}: nothing; the contrast is excluded (default, unchanged).
+\item \code{"donor"}: the same donor's control from the nearest other visit with the
+same parent population. Nearest is by order of the visit levels; a tie goes
+to the earlier visit. A donor with no control at all falls back to
+\code{"population"}, flagged by \code{control_fallback = TRUE}.
+\item \code{"population"}: an all-zero control row.
+}
+
+Every \code{scores} row has \code{control_source}: \code{"paired"}, \code{"donor_visit:<visit>"}
+or \code{"population"}. A \code{"population"} row is scored against the other donors'
+controls, so it is only as good as the assumption that this donor's
+unstimulated pattern distribution resembles theirs (\code{docs/adr/0003}). A
+borrowed control carries any real visit effect on the background. A run in
+which no donor has a control is skipped and listed in \code{excluded}.
+\code{COMPASS::PosteriorDiff()} on a \code{"population"} row is relative to that
+population control. The category filter reads only stimulated counts, so
+zero rows do not change which patterns it removes.
+}
+
 \examples{
 \dontshow{if (requireNamespace("COMPASS", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 \donttest{

@@ -11,6 +11,7 @@ cj_run_compass(
   gate = NULL,
   transform = NULL,
   control = "control",
+  missing_control = c("drop", "donor", "population"),
   ...,
   gate_args = list()
 )
@@ -20,6 +21,10 @@ cj_run_compass(
 
 \item{markers, samples, gate, transform, control}{Used only when \code{x} is a cell
 data frame; see \code{\link[=cj_from_cells]{cj_from_cells()}}. \code{samples} is required then.}
+
+\item{missing_control}{What to do with stimulated samples that have no
+control: \code{"drop"} (default), \code{"donor"} or \code{"population"}; see \code{\link[=cj_compass]{cj_compass()}}.
+The table gets \code{control_source} and \code{control_fallback}.}
 
 \item{...}{Passed to \code{\link[=cj_compass]{cj_compass()}} (for example \code{iterations}, \code{replications},
 \code{seed}).}

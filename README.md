@@ -70,3 +70,21 @@ adapter are implemented and tested. `cj_from_gatingset()` has never run, the
 pilot benchmark is not finished, and CI has never run. See
 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for each item and its
 evidence, and [docs/SCOPE.md](docs/SCOPE.md) for what is in and out of v0.1.
+
+## Real-data results and limitations
+
+COMPASS outperforms the default `m1dm` for responder classification on RV144 and TB.
+The numbers come from the outer repo, [cytoJointR-reproducibility](https://github.com/mdmanurung/cytoJointR-reproducibility). Details and sources are in `runs/2026-11-03_realdata/README.md`; the benchmark is in `benchmark/README.md`.
+
+| Data set | AUC, `m1dm` P(RMS > eps), sample level | AUC, COMPASS FS | Donors |
+|---|---|---|---|
+| RV144, vaccine against placebo | 0.755 | 0.977 | 226 vaccine, 36 placebo |
+| TB_s, QFT+ against QFT- | 0.758 | 0.987 | 22 and 18 |
+| TB_u, QFT+ against QFT- | 0.649 | 0.864 | 22 and 18 |
+
+- **False positives.** The sample-level rule P(RMS > 1e-4) > 0.95 calls 8 of 36 RV144 placebos positive. COMPASS calls 0 of 36.
+- **Structured level.** It ranks better on RV144 (AUC 0.932) and TB_s (0.917). It does not on TB_u (0.610). At the 0.95 rule it calls 2 of 22 QFT+ donors on TB_s and 0 on TB_u (TPR 0.091 and 0.000). At eps 1e-4 it still calls 5 of 36 RV144 placebos, and it shows no infection signal (odds ratio per SD 0.997).
+- **Mean misfit.** The fitted structured mean exceeds the observed rates. For cells with 3 or more positive markers the ratio is 4.5 to 24 in RV144. The cause is not established.
+- **No usable false-positive rate elsewhere.** HVTN078 has 5 placebos, so its AUC is uninformative. The SARS-CoV-2 donors had prior COVID-19, so Spike responses at baseline are expected.
+- **SimpleCOMPASS** (21 donors): the intervals overlap and no method is clearly better.
+- **Experimental responder-mixture model.** Branch `feat/donor-effects` (not merged) reaches RV144-dev AUC 0.98, against 0.974 for COMPASS. The paired difference is not distinguishable from 0 (best case +0.007, 95% CI -0.007 to 0.025). It stays at TB_u AUC 0.61 to 0.64, against 0.864 for COMPASS, and fails some simulation coverage guards. It does not beat COMPASS on the frozen criteria.

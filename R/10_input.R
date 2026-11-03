@@ -152,7 +152,8 @@ cj_subset <- function(x, parent_population) {
   contrasts <- x$contrasts[as.character(x$contrasts$parent_population) == parent_population, ,
                            drop = FALSE]
   rownames(contrasts) <- NULL
-  new_cj_data(x$counts[keep, , drop = FALSE], samples, contrasts, x$bits, x$provenance)
+  carry_intensity(new_cj_data(x$counts[keep, , drop = FALSE], samples, contrasts, x$bits, x$provenance),
+                  x, keep)
 }
 
 # Long count table from a K-pattern code vector per sample; shared by the adapters.

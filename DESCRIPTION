@@ -25,6 +25,8 @@ Suggests:
     flowCore,
     flowWorkspace,
     knitr,
+    openCyto,
+    polyICSFlow,
     rmarkdown,
     testthat (>= 3.0.0),
     withr

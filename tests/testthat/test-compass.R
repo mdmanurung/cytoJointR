@@ -101,6 +101,8 @@ test_that("'donor' borrows the nearest other visit, ties to the earlier, and fal
   f <- cc$fits[["CMV | v2 | CD4"]]
   n1 <- x$counts["D1_v1_control", ]
   expect_equal(unname(rowSums(f$data$n_u)["D1"]), sum(n1))
+  names(n1) <- cytoJointR:::compass_pattern_names(x$bits)   # counts columns follow bits rows
+  expect_equal(unname(f$data$n_u["D1", ]), unname(n1[colnames(f$data$n_u)]))
   expect_message(cj_compass(x, missing_control = "donor", iterations = 100, replications = 2),
                  "against the population control \\(3 of them a fallback")
 })
@@ -182,4 +184,15 @@ test_that("control_shift_check is set and warns when the donor's controls differ
   expect_equal(chk(cc, "D1_v2_CD4_CMV"), "differs")
   # D2 lacks v3 and has v1, v2: untestable would need one control; D3 has none and is not checked.
   expect_true(is.na(chk(cc, "D3_v1_CD4_CMV")))
+})
+
+test_that("'donor' skips an empty control instead of failing", {
+  skip_if_not_installed("COMPASS")
+  x <- mc_data()
+  # D2 lacks its v3 control; empty its v1 control so only v2 is usable.
+  x$counts["D2_v1_control", ] <- 0L
+  cc <- suppressWarnings(suppressMessages(
+    cj_compass(x, missing_control = "donor", iterations = 100, replications = 2)))
+  expect_equal(cc$scores$control_source[cc$scores$contrast_id == "D2_v3_CD4_CMV"], "donor_visit:v2")
+  expect_equal(cc$scores$control_shift_check[cc$scores$contrast_id == "D2_v3_CD4_CMV"], "untestable")
 })

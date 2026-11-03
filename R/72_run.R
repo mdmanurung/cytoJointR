@@ -24,7 +24,7 @@ as_cj_data <- function(x, markers, samples, gate, transform, control, ...) {
 #'   data frame; see [cj_from_cells()]. `samples` is required then.
 #' @param missing_control What to do with stimulated samples that have no
 #'   control: `"drop"` (default), `"donor"` or `"population"`; see [cj_compass()].
-#'   The table gets `control_source` and `control_fallback`.
+#'   The table gets `control_source`, `control_fallback` and `control_shift_check`.
 #' @param ... Passed to [cj_compass()] (for example `iterations`, `replications`,
 #'   `seed`).
 #' @param gate_args List of extra arguments for [cj_gate()] (for example

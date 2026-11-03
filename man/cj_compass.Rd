@@ -67,8 +67,9 @@ of its own visit gets:
 \item \code{"drop"}: nothing; the contrast is excluded (default, unchanged).
 \item \code{"donor"}: the same donor's control from the nearest other visit with the
 same parent population. Nearest is by order of the visit levels; a tie goes
-to the earlier visit. A donor with no control at all falls back to
-\code{"population"}, flagged by \code{control_fallback = TRUE}.
+to the earlier visit. Controls with no cells are skipped. A donor with no
+usable control at another visit of the same parent population falls back
+to \code{"population"}, flagged by \code{control_fallback = TRUE}.
 \item \code{"population"}: an all-zero control row.
 }
 

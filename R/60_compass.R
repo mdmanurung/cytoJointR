@@ -50,6 +50,8 @@ compass_resolve_controls <- function(x, missing_control) {
     for (i in which(none)) {
       cand <- ctrl[ctrl$donor_id == ct$donor_id[i] & ctrl$parent_population == ct$parent_population[i] &
                     ctrl$visit != ct$visit[i], ]
+      # A control with no cells cannot stand in for one; leave it out.
+      cand <- cand[rowSums(x$counts[cand$sample_id, , drop = FALSE]) > 0, ]
       if (missing_control == "donor" && nrow(cand)) {
         pos <- match(as.character(cand$visit), lev)
         # Nearest visit by level order; a tie goes to the earlier visit.
@@ -106,8 +108,9 @@ compass_resolve_controls <- function(x, missing_control) {
 #' * `"drop"`: nothing; the contrast is excluded (default, unchanged).
 #' * `"donor"`: the same donor's control from the nearest other visit with the
 #'   same parent population. Nearest is by order of the visit levels; a tie goes
-#'   to the earlier visit. A donor with no control at all falls back to
-#'   `"population"`, flagged by `control_fallback = TRUE`.
+#'   to the earlier visit. Controls with no cells are skipped. A donor with no
+#'   usable control at another visit of the same parent population falls back
+#'   to `"population"`, flagged by `control_fallback = TRUE`.
 #' * `"population"`: an all-zero control row.
 #'
 #' Every `scores` row has `control_source`: `"paired"`, `"donor_visit:<visit>"`

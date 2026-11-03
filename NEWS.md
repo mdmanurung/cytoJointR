@@ -1,5 +1,15 @@
 # cytoJointR 0.0.0.9000
 
+* `cj_compass(missing_control = c("drop", "donor", "population"))` runs COMPASS on
+  stimulated samples that have no control sample. `"drop"` (default) is the old
+  behaviour. `"donor"` borrows the same donor's control from the nearest other
+  visit (ties to the earlier visit; no control at all falls back to
+  `"population"`, flagged). `"population"` passes an all-zero control row, which
+  COMPASS compares with the other donors' control distribution. Scores gain
+  `control_source` and `control_fallback`, a message counts the unpaired rows,
+  and `cj_run_compass()` passes the option on. The assumptions and the
+  simulation evidence are in `docs/adr/0003-compass-missing-control.md`.
+
 * Adoption API: from a cell data frame to scores in a few calls.
   `cj_gate()` finds one threshold per marker on all control events pooled
   (`"tail"` default, `"quantile"`, `"mindensity"` through openCyto, or `"manual"`)

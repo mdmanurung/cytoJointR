@@ -15,6 +15,26 @@ compass_require <- function() {
     stop("The COMPASS package is required; install it to use cj_compass()", call. = FALSE)
 }
 
+# A priori choices, not tuned on any data: two controls of one donor "differ" when a
+# two-sample proportion test of the any-positive fraction gives p < 0.01 and the
+# fractions differ by at least 25% (fold). The fold keeps a huge-N test from flagging
+# a trivial difference; the test keeps a small-N fold from flagging noise.
+COMPASS_SHIFT_ALPHA <- 0.01
+COMPASS_SHIFT_FOLD <- 1.25
+
+# "ok", "differs" or "untestable" for the controls of one donor (rows of counts).
+compass_shift_check <- function(counts, bits) {
+  if (nrow(counts) < 2L) return("untestable")
+  n <- rowSums(counts)
+  pos <- n - counts[, which(rowSums(bits) == 0)]
+  differs <- vapply(utils::combn(nrow(counts), 2L, simplify = FALSE), function(i) {
+    fold <- max(pos[i] / n[i]) / min(pos[i] / n[i])
+    p <- suppressWarnings(stats::prop.test(pos[i], n[i])$p.value)
+    isTRUE(p < COMPASS_SHIFT_ALPHA && fold >= COMPASS_SHIFT_FOLD)
+  }, NA)
+  if (any(differs)) "differs" else "ok"
+}
+
 # Decide the control sample of every stimulated sample. Returns the contrasts to run
 # (with control_source, control_fallback and a control_sample_id that is NA for
 # "population") and the contrasts left out with the reason.
@@ -23,6 +43,7 @@ compass_resolve_controls <- function(x, missing_control) {
   none <- is.na(ct$control_sample_id)
   ct$control_source <- ifelse(none, NA_character_, "paired")
   ct$control_fallback <- FALSE
+  ct$control_shift_check <- NA_character_
   if (missing_control != "drop") {
     ctrl <- x$samples[x$samples$condition == CONTROL_CONDITION, ]
     lev <- levels(x$samples$visit)
@@ -35,6 +56,7 @@ compass_resolve_controls <- function(x, missing_control) {
         pick <- cand[order(abs(pos - match(as.character(ct$visit[i]), lev)), pos)[1], ]
         ct$control_sample_id[i] <- pick$sample_id
         ct$control_source[i] <- paste0("donor_visit:", pick$visit)
+        ct$control_shift_check[i] <- compass_shift_check(x$counts[cand$sample_id, , drop = FALSE], x$bits)
       } else {
         ct$control_source[i] <- "population"
         ct$control_fallback[i] <- missing_control == "donor"
@@ -98,6 +120,27 @@ compass_resolve_controls <- function(x, missing_control) {
 #' population control. The category filter reads only stimulated counts, so
 #' zero rows do not change which patterns it removes.
 #'
+#' @section Calibration (experimental):
+#' `"donor"` and `"population"` print a message saying so. In simulation (40
+#' donors, 4 markers, 50% responders, 20 seeds, controls missing at random,
+#' `runs/2026-11-07_compass-missing-control/`) the donor-level call "max mean
+#' gamma > 0.5" kept its ranking but not its error rate for non-paired rows.
+#' Among non-responders:
+#'
+#' | Option | Setting | FPR, non-paired | FPR, paired |
+#' |---|---|---|---|
+#' | `"population"` | moderate effect | 0.19 to 0.39 | 0.05 to 0.10 |
+#' | `"population"` | rare, weak effect | 0.01 to 0.03, TPR 0.20 to 0.70 (paired 0.64) | 0.01 |
+#' | `"donor"` | stable background | 0.06 to 0.17 (moderate) | 0.05 to 0.08 |
+#' | `"donor"` | background x1.5 at visit 2 | 0.4 to 0.55 pooled; 0.81 to 0.94 for the later visit | 0.06 to 0.19 |
+#'
+#' Use them to rank donors, not to call responders. For `"donor"`, the donor's
+#' available controls at other visits are compared first (any-positive fraction,
+#' two-sample proportion test and a fold difference, both fixed a priori and not
+#' tuned on benchmark data). `control_shift_check` is `"ok"`, `"differs"` or
+#' `"untestable"` (only one control to borrow), and `"differs"` or `"untestable"`
+#' gives a warning. See `docs/adr/0003-compass-missing-control.md`.
+#'
 #' @param x A `cj_data` (or a `cj_fit`, whose `data` is used).
 #' @param category_filter COMPASS category filter; the default is COMPASS's own.
 #' @param verbose Show COMPASS's console output.
@@ -109,7 +152,7 @@ compass_resolve_controls <- function(x, missing_control) {
 #' @return A `cj_compass` list with `fits` (named list of `COMPASSResult`),
 #'   `scores` (tidy table with `compass_FS`, `compass_PFS`,
 #'   `compass_response_degree1`, `compass_response_degree2`, `control_source`,
-#'   `control_fallback`), `groups` (one
+#'   `control_fallback`, `control_shift_check`), `groups` (one
 #'   row per COMPASS run with its status), `filters` (what the category filter
 #'   removed per run) and `excluded` (contrasts left out, with the reason).
 #' @export
@@ -138,6 +181,20 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
   excluded <- ct$excluded
   ct <- ct$contrasts
   n_alt <- sum(ct$control_source != "paired")
+  if (missing_control != "drop")
+    message("missing_control = \"", missing_control, "\" is experimental: use it to rank donors. ",
+            "In simulation (40 donors, 4 markers) the gamma > 0.5 call is not calibrated for non-paired ",
+            "rows. False-positive rate among non-responders: ",
+            if (missing_control == "population")
+              "0.19 to 0.39 at a moderate effect (paired 0.05 to 0.10); power falls at a rare, weak effect."
+            else
+              "0.06 to 0.17 when the background is stable across visits, 0.4 to 0.55 pooled and 0.81 to 0.94 for the later visit when it rises by 1.5-fold (paired 0.05 to 0.10).",
+            " See docs/adr/0003-compass-missing-control.md.")
+  bad <- ct$control_shift_check %in% c("differs", "untestable")
+  if (any(bad))
+    warning(sum(ct$control_shift_check %in% "differs"), " borrowed control(s) come from a visit whose background ",
+            "differs from the donor's other controls and ", sum(ct$control_shift_check %in% "untestable"),
+            " could not be checked (the donor has one control); see control_shift_check", call. = FALSE)
   if (n_alt)
     message(n_alt, " of ", nrow(ct), " contrast(s) ran without a paired control: ",
             sum(startsWith(ct$control_source, "donor_visit")), " with the donor's control from another visit, ",
@@ -209,7 +266,8 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
       compass_PFS = unname(COMPASS::PolyfunctionalityScore(fit)[cg$donor_id]),
       compass_response_degree1 = unname(resp(1)),
       compass_response_degree2 = unname(resp(2)),
-      control_source = cg$control_source, control_fallback = cg$control_fallback)
+      control_source = cg$control_source, control_fallback = cg$control_fallback,
+      control_shift_check = cg$control_shift_check)
   }
   bind <- function(l) if (length(l)) do.call(rbind, unname(l))
   structure(list(fits = fits, scores = bind(tidy), groups = bind(groups),

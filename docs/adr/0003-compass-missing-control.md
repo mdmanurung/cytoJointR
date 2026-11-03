@@ -42,6 +42,14 @@ real visit effect on the background biases the borrowed contrast. The size of
 both effects on simulated data is in `runs/2026-11-07_compass-missing-control/`
 of the reproducibility repo. Neither option is the default.
 
+## Caveats built in
+
+Both options are experimental: a message says so and gives the simulated FPR.
+`"donor"` compares the donor's available controls across visits (any-positive
+fraction; proportion test p < 0.01 and a 1.25-fold difference, fixed a priori)
+and sets `control_shift_check` to `ok`, `differs` or `untestable`, warning on the
+last two.
+
 ## Consequences
 
 - Default behaviour and outputs are unchanged apart from two new columns.

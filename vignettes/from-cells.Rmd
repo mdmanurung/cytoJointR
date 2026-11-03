@@ -153,6 +153,17 @@ between visits, and the population control assumes this donor's background is
 like the others'; see `docs/adr/0003-compass-missing-control.md` for the
 simulation behind these cautions.
 
+| Option | Setting | FPR, non-paired | FPR, paired |
+|---|---|---|---|
+| `"population"` | moderate effect | 0.19 to 0.39 | 0.05 to 0.10 |
+| `"population"` | rare, weak effect | 0.01 to 0.03, TPR 0.20 to 0.70 (paired 0.64) | 0.01 |
+| `"donor"` | stable background | 0.06 to 0.17 | 0.05 to 0.08 |
+| `"donor"` | background x1.5 at visit 2 | 0.4 to 0.55 pooled (0.81 to 0.94 later visit) | 0.06 to 0.19 |
+
+Both options are experimental and best used to rank donors. `"donor"` checks the
+donor's other controls first and sets `control_shift_check` to `ok`, `differs`
+or `untestable`; the last two warn. Details: ADR 0003.
+
 ```{r compass-missing, eval = FALSE}
 cj_run_compass(x, missing_control = "donor", iterations = 200, replications = 2)
 ```

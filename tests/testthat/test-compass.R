@@ -132,3 +132,54 @@ test_that("a run with no control in any donor is excluded with a reason", {
   expect_match(cc$excluded$reason[1], "no donor")
   expect_false(any(cc$scores$visit == "v1"))
 })
+
+test_that("missing_control options say they are experimental, once per call, with FPR numbers", {
+  skip_if_not_installed("COMPASS")
+  x <- mc_data()
+  m <- testthat::capture_messages(
+    cj_compass(x, missing_control = "population", iterations = 100, replications = 2))
+  expect_equal(sum(grepl("experimental", m)), 1)
+  expect_true(any(grepl("0.19 to 0.39", m)))
+  m <- testthat::capture_messages(suppressWarnings(
+    cj_compass(x, missing_control = "donor", iterations = 100, replications = 2)))
+  expect_equal(sum(grepl("experimental", m)), 1)
+  expect_true(any(grepl("0.81 to 0.94", m)))
+  expect_no_match(testthat::capture_messages(
+    cj_compass(x, iterations = 100, replications = 2)), "experimental")
+})
+
+test_that("compass_shift_check separates a large background difference from none", {
+  bits <- cj_bits(c("A", "B"))
+  null <- which(rowSums(bits) == 0)
+  mk <- function(frac_pos, n = 50000) {
+    v <- rep(0L, nrow(bits)); v[-null] <- as.integer(round(n * frac_pos / 3)); v[null] <- n - sum(v); v
+  }
+  same <- rbind(mk(0.05), mk(0.052))
+  expect_equal(cytoJointR:::compass_shift_check(same, bits), "ok")
+  big <- rbind(mk(0.05), mk(0.10))
+  expect_equal(cytoJointR:::compass_shift_check(big, bits), "differs")
+  expect_equal(cytoJointR:::compass_shift_check(same[1, , drop = FALSE], bits), "untestable")
+})
+
+test_that("control_shift_check is set and warns when the donor's controls differ", {
+  skip_if_not_installed("COMPASS")
+  x <- mc_data()
+  null <- which(rowSums(x$bits) == 0)
+  # D1 lacks the v2 control. Same background at v1 and v3: ok. D2 lacks v3 and has v1, v2.
+  expect_no_warning(cc <- suppressMessages(
+    cj_compass(x, missing_control = "donor", iterations = 100, replications = 2)))
+  chk <- function(cc, id) cc$scores$control_shift_check[cc$scores$contrast_id == id]
+  expect_equal(chk(cc, "D1_v2_CD4_CMV"), "ok")
+  expect_true(is.na(chk(cc, "D4_v1_CD4_CMV")))
+  # Move 60% of D1's v3 control cells from the null pattern into a positive pattern.
+  y <- x
+  r <- "D1_v3_control"
+  moved <- as.integer(0.6 * y$counts[r, null])
+  y$counts[r, null] <- y$counts[r, null] - moved
+  y$counts[r, setdiff(seq_len(ncol(y$counts)), null)[1]] <- y$counts[r, setdiff(seq_len(ncol(y$counts)), null)[1]] + moved
+  expect_warning(cc <- suppressMessages(
+    cj_compass(y, missing_control = "donor", iterations = 100, replications = 2)), "control_shift_check")
+  expect_equal(chk(cc, "D1_v2_CD4_CMV"), "differs")
+  # D2 lacks v3 and has v1, v2: untestable would need one control; D3 has none and is not checked.
+  expect_true(is.na(chk(cc, "D3_v1_CD4_CMV")))
+})

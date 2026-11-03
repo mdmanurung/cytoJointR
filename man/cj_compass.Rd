@@ -30,7 +30,7 @@ control samples}.}
 A \code{cj_compass} list with \code{fits} (named list of \code{COMPASSResult}),
 \code{scores} (tidy table with \code{compass_FS}, \code{compass_PFS},
 \code{compass_response_degree1}, \code{compass_response_degree2}, \code{control_source},
-\code{control_fallback}), \code{groups} (one
+\code{control_fallback}, \code{control_shift_check}), \code{groups} (one
 row per COMPASS run with its status), \code{filters} (what the category filter
 removed per run) and \code{excluded} (contrasts left out, with the reason).
 }
@@ -81,6 +81,29 @@ which no donor has a control is skipped and listed in \code{excluded}.
 \code{COMPASS::PosteriorDiff()} on a \code{"population"} row is relative to that
 population control. The category filter reads only stimulated counts, so
 zero rows do not change which patterns it removes.
+}
+
+\section{Calibration (experimental)}{
+
+\code{"donor"} and \code{"population"} print a message saying so. In simulation (40
+donors, 4 markers, 50\% responders, 20 seeds, controls missing at random,
+\verb{runs/2026-11-07_compass-missing-control/}) the donor-level call "max mean
+gamma > 0.5" kept its ranking but not its error rate for non-paired rows.
+Among non-responders:\tabular{llll}{
+   Option \tab Setting \tab FPR, non-paired \tab FPR, paired \cr
+   \code{"population"} \tab moderate effect \tab 0.19 to 0.39 \tab 0.05 to 0.10 \cr
+   \code{"population"} \tab rare, weak effect \tab 0.01 to 0.03, TPR 0.20 to 0.70 (paired 0.64) \tab 0.01 \cr
+   \code{"donor"} \tab stable background \tab 0.06 to 0.17 (moderate) \tab 0.05 to 0.08 \cr
+   \code{"donor"} \tab background x1.5 at visit 2 \tab 0.4 to 0.55 pooled; 0.81 to 0.94 for the later visit \tab 0.06 to 0.19 \cr
+}
+
+
+Use them to rank donors, not to call responders. For \code{"donor"}, the donor's
+available controls at other visits are compared first (any-positive fraction,
+two-sample proportion test and a fold difference, both fixed a priori and not
+tuned on benchmark data). \code{control_shift_check} is \code{"ok"}, \code{"differs"} or
+\code{"untestable"} (only one control to borrow), and \code{"differs"} or \code{"untestable"}
+gives a warning. See \code{docs/adr/0003-compass-missing-control.md}.
 }
 
 \examples{

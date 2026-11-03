@@ -17,7 +17,8 @@ cmdstanr::install_cmdstan()
 ```
 
 `cmdstanr` comes from `https://stan-dev.r-universe.dev`. COMPASS (Bioconductor)
-is optional and needed only for `cj_compass()`.
+is optional and needed only for `cj_compass()` and `cj_run_compass()`; openCyto
+(`cj_gate(method = "mindensity")`) and polyICSFlow (`cj_run_polyicsflow()`) are optional too.
 
 ## Example
 
@@ -33,6 +34,21 @@ eps <- c(RMS = 0.005, poly_absolute = 0.005, poly_marginal = 0.005, CPS = 0.02,
 sc <- cj_scores(fit, eps)
 cj_plot_forest(sc, score = c("RMS", "CCS"))
 ```
+
+From a cell data frame (one row per event) to scores:
+
+```r
+samples <- data.frame(sample_id = c("D1_ctrl", "D1_cmv"), donor_id = "D1", visit = factor("v1"),
+                      parent_population = "CD4", condition = c("unstim", "CMV"))
+gate <- cj_gate(cells, c("IFNG", "TNF", "IL2"), samples, transform = "asinh", cofactor = 150,
+                control = "unstim")             # one pooled threshold per marker
+cj_plot_gate(gate)                              # check every panel
+x  <- cj_from_cells(cells, samples = samples, gate = gate)
+fs <- cj_fluorescence_scores(x, n_boot = 200, seed = 1)  # NICR, Poly-NICR, FIS, iw_FS/PFS
+cp <- cj_run_compass(x)                         # needs COMPASS
+```
+
+`cj_quickstart()` runs these in one call. `vignette("from-cells")` has the details.
 
 `vignette("cytoJointR")` walks through the full workflow.
 `vignette("comparison")` maps COMPASS and polyICSFlow features to this package.

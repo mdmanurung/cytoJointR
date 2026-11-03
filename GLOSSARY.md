@@ -70,3 +70,50 @@ _Avoid_: baseline, control
 
 **Display-only value**:
 A derived value, such as a clipped net score, shown in plots but never used for inference.
+
+## Fluorescence and gating
+
+**Pooled gate**:
+One threshold per marker, found on all control events pooled across donors,
+visits and samples, on a stated transform (`cj_gate()`).
+_Avoid_: per-sample gate, cutoff
+
+**Threshold** (`t_j`):
+The transformed-fluorescence value above which marker `j` is positive.
+
+**Excess** (`X_j - t_j`):
+Transformed fluorescence above the threshold. Positive for a positive cell.
+Units are those of the transform (for example asinh units), not protein counts.
+
+**Conditional intensity** (`I_ckj`):
+The mean excess of marker `j` among the cells of pattern `k` in condition `c`.
+Plug-in estimate from events; no truncated-Gaussian model in the descriptive scores.
+
+**Burden** (`B_cj`):
+`sum over patterns positive for j of p_ck I_ckj`: the mean of `(X_j - t_j) * 1[X_j > t_j]`
+over all parent events of condition `c`.
+
+**NICR** (net integrated cytokine response, `NICR_j = B_Sj - B_Uj`):
+Signed stimulated-minus-control burden of one marker. Never summed across
+markers, because channels are on different scales.
+_Avoid_: iMFI (a different, mean- or median-based quantity)
+
+**Poly-NICR**:
+The NICR sum restricted to patterns of degree 2 or more.
+
+**Frequency and intensity parts**:
+Exact split `dB_k = dp_k (I_S + I_U)/2 + dI_k (p_S + p_U)/2` per pattern. A
+pattern seen in one condition only goes to `nicr_unmatched`. An algebraic
+allocation, not a causal one.
+
+**FIS** (fixed-reference intensity shift):
+`sum_k w_kj (I_Skj - I_Ukj)` with weights `w_kj` fixed and common to both
+conditions. Unavailable (`NA` with a reason) where a reference pattern lacks events.
+
+**Intensity-weighted FS and PFS** (`iw_fs`, `iw_pfs`; experimental):
+COMPASS's FS and PFS weights applied to the net burden of marker `j` in each
+subset, `dB_kj = p_Sk I_Skj - p_Uk I_Ukj`, in place of COMPASS's posterior
+response probability. `iw_fs_j = sum dB_kj / (2^J - 1)` (equal to `NICR_j` over
+`2^J - 1`); `iw_pfs_j = sum dB_kj * d_k / choose(J, d_k) / J * 2 / (J + 1)`.
+Signed, per marker, in fluorescence units per parent cell; not on the scale of
+COMPASS FS/PFS.

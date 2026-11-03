@@ -1,5 +1,21 @@
 # cytoJointR 0.0.0.9000
 
+* Adoption API: from a cell data frame to scores in a few calls.
+  `cj_gate()` finds one threshold per marker on all control events pooled
+  (`"tail"` default, `"quantile"`, `"mindensity"` through openCyto, or `"manual"`)
+  on an explicit `transform` (never assumed); `cj_plot_gate()` shows the pooled
+  control density with the threshold. `cj_from_cells()` builds the `cj_data` and
+  keeps per-pattern sums of `X - t` and `(X - t)^2`. `cj_run_compass()` and
+  `cj_run_polyicsflow()` return tidy per-donor tables. `cj_quickstart()` chains
+  them. `method = "tail"` is implemented in the package: current openCyto has no
+  `gate_tail()`. openCyto, COMPASS and polyICSFlow are `Suggests`.
+* `cj_fluorescence_scores()`: descriptive, model-free NICR, Poly-NICR, FIS and
+  an exact frequency/intensity split per donor, stimulation, visit and marker,
+  with a cell-level bootstrap. Experimental `iw_fs` and `iw_pfs` apply COMPASS's
+  FS and PFS weights to the net burden instead of the response probability.
+  Definitions: `?cj_fluorescence_scores` and `GLOSSARY.md`. `cj_subset()` keeps
+  the intensity summaries.
+
 * Package started from the unified design bundle of 2026-11-01. Reference
   utilities (`cj_bits`, `cj_compress`, likelihood, IPF counterfactual,
   `cj_score_reference`, `cj_summarize_signed`) carried over unchanged; they

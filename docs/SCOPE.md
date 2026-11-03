@@ -48,10 +48,22 @@ Where this file and the bundle disagree, this file wins for v0.1.
    posterior differences, mean-gamma heatmap, with COMPASS's own default
    filters (reported). COMPASS in `Suggests`.
 6. Heatmaps and plots as static ggplot2 / ComplexHeatmap.
+7. **Adoption API** (added 2026-11-03): a user with a cell data frame gates,
+   builds a `cj_data` and gets scores in a few calls. `cj_gate()` (pooled
+   control gate on a stated transform), `cj_from_cells()` (keeps per-pattern
+   intensity sums), `cj_run_compass()`, `cj_run_polyicsflow()`,
+   `cj_fluorescence_scores()` and the thin `cj_quickstart()`.
+   `cj_fluorescence_scores()` is the descriptive part of the former M2: NICR,
+   Poly-NICR, the frequency/intensity split, FIS and experimental
+   intensity-weighted FS/PFS, as plug-in estimates from events with a
+   cell-level bootstrap. No new Stan model. openCyto, COMPASS and polyICSFlow
+   are `Suggests`.
 
 ## Deferred
 
-M2 conditional fluorescence (NICR, Poly-NICR, FIS); RTMB engine; group terms
+A fluorescence model (M2: truncated-Gaussian conditional intensities with
+posterior uncertainty for NICR, Poly-NICR and FIS; the descriptive versions are in
+v0.1, item 7); RTMB engine; group terms
 and `cj_group_contrast()`; donor-specific induced change across visits;
 per-visit interaction change; continuous-time visits; Shiny app; hierarchical
 missing-control prediction; CRAN/Bioconductor build layer.

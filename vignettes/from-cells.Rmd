@@ -1,0 +1,166 @@
+---
+title: "From a cell data frame to scores"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{From a cell data frame to scores}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 4)
+library(cytoJointR)
+# Optional packages: chunks that need them run only when they are installed.
+has_pkg <- function(p) nzchar(system.file(package = p)) && requireNamespace(p, quietly = TRUE)
+has_compass <- has_pkg("COMPASS")
+has_polyics <- has_pkg("polyICSFlow")
+```
+
+This vignette goes from one row per event to gated patterns, COMPASS and
+polyICSFlow scores, and the fluorescence-aware scores of cytoJointR. It uses
+simulated cells, so the true gate is known (fluorescence 0).
+Optional packages (COMPASS: `r if (has_compass) "installed" else "not installed, its chunk is shown but not run"`;
+polyICSFlow: `r if (has_polyics) "installed" else "not installed, its chunk is shown but not run"`)
+are checked at run time.
+
+## Cells and samples
+
+`cells` has one row per event: `sample_id` and one fluorescence column per
+marker. Events must already be inside the parent population (for example live
+CD4 T cells). `samples` has one row per sample with `donor_id`, `visit` (a factor
+with explicit levels), `parent_population` and `condition`.
+
+```{r data}
+sim <- cj_simulate_cells(donors = 10, cells_per_sample = 1500, seed = 1)
+cells <- sim$cells
+markers <- c("IFNG", "TNF", "IL2")
+samples <- unique(cells[c("sample_id", "donor_id", "condition")])
+samples$visit <- factor("v1")
+samples$parent_population <- "CD4"
+head(cells[c("sample_id", markers)], 3)
+table(samples$condition)
+```
+
+The simulator calls the unstimulated sample `"unstim"`. The package wants
+`"control"` internally, so every function takes `control = "unstim"` and
+recodes it.
+
+## Gate
+
+`cj_gate()` finds one threshold per marker on all control events pooled over
+donors. The transform must be stated: `"none"` means these cells are already on
+the analysis scale. For raw fluorescence use `transform = "asinh"` with a
+`cofactor`, or pass a function.
+
+```{r gate}
+gate <- cj_gate(cells, markers, samples, transform = "none", control = "unstim")
+gate
+```
+
+The default `"tail"` method runs in base R. It takes the main peak of the
+pooled control density as the negative population and puts the cut 3.09 spreads
+above it. `method = "quantile"` takes a control quantile. `method = "mindensity"`
+calls `openCyto::gate_mindensity()` when openCyto is installed (otherwise it
+warns and uses the quantile). `thresholds = c(IFNG = 0.3, ...)` sets them by hand.
+Always look at the gate.
+
+```{r gate-plot}
+cj_plot_gate(gate)
+```
+
+Here the true gate is 0. The tail gate misclassifies
+`r sprintf("%.2f%%", 100 * mean(unlist(lapply(markers, function(m) (cells[[m]] > gate$thresholds[[m]]) != (cells[[m]] > 0)))))`
+of cells against it.
+
+## Cells to `cj_data`
+
+`cj_from_cells()` applies the gate, tabulates exact patterns per sample and
+returns the same `cj_data` the count workflow uses, so `cj_describe()`,
+`cj_fit()` and `cj_scores()` work on it. It also keeps the per-pattern sums of
+`X - t` and `(X - t)^2` that the fluorescence scores need.
+
+```{r data-object}
+x <- cj_from_cells(cells, samples = samples, gate = gate)
+x
+dim(x$intensity$sx)  # sample x pattern x marker
+```
+
+## Fluorescence-aware scores
+
+`cj_fluorescence_scores()` returns one row per donor, stimulation, visit and
+marker. All scores are descriptive: plug-in estimates from the events, in
+transformed fluorescence units per parent cell. Donors without a control are
+listed and omitted.
+
+```{r fluor}
+fs <- cj_fluorescence_scores(x, n_boot = 100, seed = 1)
+head(fs[c("donor_id", "marker", "nicr", "nicr_lo", "nicr_hi", "poly_nicr", "iw_pfs")], 6)
+```
+
+* `nicr`: net integrated cytokine response of the marker, stimulated minus
+  control burden. Markers are never summed.
+* `poly_nicr`: the same over patterns with two or more positive markers.
+* `nicr_freq`, `nicr_int`, `nicr_unmatched`: an exact split of `nicr` into a
+  change in how many cells are in each pattern and a change in how bright they
+  are. They add up to `nicr`:
+
+```{r decomp}
+with(fs, max(abs(nicr - nicr_freq - nicr_int - nicr_unmatched)))
+```
+
+* `fis`: intensity shift under fixed reference weights, `NA` with a reason where
+  a reference pattern has no cells. Controls hold few polyfunctional cells, so
+  use `reference = "single"` to ask for the shift among cells positive for that
+  marker alone.
+* `iw_fs`, `iw_pfs` (experimental): COMPASS's FS and PFS weights applied to the
+  net burden of each marker in each subset instead of a response probability.
+
+```{r fis}
+fs1 <- cj_fluorescence_scores(x, reference = "single")
+table(fis_available = !is.na(fs1$fis))
+```
+
+The bootstrap resamples events within each sample. Its intervals cover cell
+sampling only. Donors are the replicates, so compare groups across donors.
+
+```{r nicr-plot, fig.height = 3.5}
+d <- fs[fs$marker == "IFNG", ]
+d$donor_id <- factor(d$donor_id, levels = d$donor_id[order(d$nicr)])
+ggplot2::ggplot(d, ggplot2::aes(.data$nicr, .data$donor_id)) +
+  ggplot2::geom_vline(xintercept = 0, colour = "grey60") +
+  ggplot2::geom_pointrange(ggplot2::aes(xmin = .data$nicr_lo, xmax = .data$nicr_hi)) +
+  ggplot2::labs(x = "NICR of IFNG (transformed units per parent cell), 95% cell bootstrap",
+                y = NULL)
+```
+
+## COMPASS and polyICSFlow
+
+`cj_run_compass()` wraps `cj_compass()` and returns a tidy FS, PFS and response
+table per donor. The full `cj_compass` object is in `attr(, "compass")`.
+
+```{r compass, eval = has_compass}
+cp <- cj_run_compass(x, iterations = 200, replications = 2, seed = 1)
+head(cp[c("donor_id", "compass_FS", "compass_PFS")], 4)
+```
+
+`cj_run_polyicsflow()` runs polyICSFlow's marker-combination and
+background-subtraction functions on the same counts. polyICSFlow clips each
+pattern at zero, so `polyics_net_any` is not the signed net percent of
+`cj_describe()`.
+
+```{r polyics, eval = has_polyics}
+pf <- cj_run_polyicsflow(x)
+head(pf$net)
+```
+
+## Everything at once
+
+`cj_quickstart()` chains gate, data, description, fluorescence scores and, when
+installed, COMPASS and polyICSFlow. Add `fit = TRUE` (and `epsilon`) to fit the
+count model and get the cytoJointR scores; that needs CmdStan.
+
+```{r quickstart}
+qs <- cj_quickstart(cells, markers, samples, transform = "none", control = "unstim",
+                    run = character())
+names(qs)
+```

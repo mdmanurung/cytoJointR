@@ -38,6 +38,12 @@ Test files are in `tests/testthat/`.
 | 5 | COMPASS adapter: FS, PFS, `Response()`, filters, heatmap | DONE | `test-compass.R` |
 | 5 | COMPASS posterior differences | PARTIAL | not wrapped; `COMPASS::PosteriorDiff()` runs on `cj_compass()$fits` and is not tested here |
 | 6 | Static ggplot2 plots | DONE | forest, response heatmap, contribution bars in `test-scores.R` |
+| 7 | Adoption API: `cj_gate()` (tail, quantile, manual), `cj_plot_gate()`, `cj_from_cells()` | DONE | `test-adoption.R`; tail gate misclassifies under 0.5% of simulated cells |
+| 7 | `cj_gate(method = "mindensity")` via `openCyto::gate_mindensity()` | NOT_RUN | openCyto aborts R on load on the development host (flowWorkspace segfault); the openCyto call is untested. Test gated on `CJ_TEST_OPENCYTO=true`. `method = "tail"` is in-package: current openCyto has no `gate_tail()` |
+| 7 | `cj_fluorescence_scores()`: NICR, Poly-NICR, frequency/intensity split, FIS, intensity-weighted FS/PFS (experimental), bootstrap | DONE | `test-adoption.R` (per-cell brute force, exact split, bootstrap); descriptive only, no Stan model, bootstrap covers within-sample cell sampling only |
+| 7 | `cj_run_compass()` | DONE | `test-adoption.R` end to end with COMPASS 1.48 under R 4.5.1 |
+| 7 | `cj_run_polyicsflow()` | NOT_RUN | polyICSFlow is not installed for R 4.5.1 and its flowWorkspace import segfaults; the wrapper was run only against polyICSFlow's own functions loaded from source, outside the package. Test skips |
+| 7 | `cj_quickstart()` | DONE | `test-adoption.R` (without `fit`) |
 | 6 | ComplexHeatmap output | PARTIAL | plots are ggplot2; ComplexHeatmap is only a Suggests entry and is not used |
 | - | Pilot benchmark | PARTIAL | 13 of 21 scenarios x 30 seeds run; see "Pilot results" below |
 
@@ -45,7 +51,9 @@ Test files are in `tests/testthat/`.
 
 * `cj_from_gatingset()` has never run. flowWorkspace segfaults on the
   development host, even after its dependency chain was rebuilt from source.
-* The polyICSFlow adapter is tested only on a hand-built table.
+* The polyICSFlow adapter is tested only on a hand-built table, and
+  `cj_run_polyicsflow()` has not run through the installed package.
+* openCyto cannot be loaded on the development host, so the `mindensity` gate is untested.
 * CI has never run because the repository has no remote.
 * The default priors in `cj_default_priors()` are illustrative smoke-test
   values, not validated.
@@ -201,7 +209,9 @@ ones (1020-1322 s, different scenarios).
 
 ## Deferred (from SCOPE)
 
-M2 conditional fluorescence (NICR, Poly-NICR, FIS); RTMB engine; group terms
+A fluorescence model (M2: truncated-Gaussian conditional intensities with
+posterior uncertainty for NICR, Poly-NICR, FIS; descriptive versions are
+implemented, see item 7); RTMB engine; group terms
 and `cj_group_contrast()`; donor-specific induced change across visits;
 per-visit interaction change; continuous-time visits; Shiny app; hierarchical
 missing-control prediction; CRAN/Bioconductor build layer.

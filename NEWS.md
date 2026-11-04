@@ -1,5 +1,10 @@
 # cytoJointR 0.0.0.9000
 
+* `cj_read_fcs()` reads pre-gated FCS files (one per sample) into the `cells` table, applying
+  each file's spillover matrix (`compensate = TRUE`); markers are chosen by channel name or
+  exact channel description. `cj_cells_from_gatingset()` does the same for one population of a
+  flowWorkspace `GatingSet`. Both feed `cj_gate()`, `cj_from_cells()` and `cj_quickstart()`.
+
 * `cj_baseline_report()`: one row per donor and follow-up visit with COMPASS at the baseline and
   follow-up visits beside the baseline-adjusted `cj_mimosa2()` call, and an `agreement` class
   (`both`, `pre_existing`, `compass_only`, `mimosa2_only`, `neither`, `not_assessed`).

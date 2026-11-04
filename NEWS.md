@@ -1,5 +1,13 @@
 # cytoJointR 0.0.0.9000
 
+* `cj_mimosa2()` runs MIMOSA2 (github.com/RGLab/MIMOSA2, Suggests) for baseline-adjusted
+  positivity calls: one fit per stimulation, parent population and follow-up visit, with each
+  donor's stimulated and control samples at the baseline and the follow-up visit. One subset per
+  fit: `positive = "any"` (any marker positive) or one marker. Donors without all four samples
+  are listed in `excluded`. Scores give the four counts, `delta`, `mimosa2_p_response`,
+  `mimosa2_fdr` (q-values within one fit) and `mimosa2_response`; native `MIMOSA2model`
+  objects are in `fits`.
+
 * `cj_compass(n_runs = , diagnostics = )` checks convergence of the COMPASS call. COMPASS's
   `replications` are passes of one chain, not independent chains, so the check refits with seeds
   `seed`, `seed + 1`, ... (`diagnostics = TRUE` means at least 5 runs, so a call never ties) and treats the fits as chains.

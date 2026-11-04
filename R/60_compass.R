@@ -240,6 +240,8 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #'   calibration (default 40). Each 5 donors cost one extra COMPASS fit per run, so the
 #'   calibrated call costs about `1 + max_pseudo / 5` fits per run with non-paired rows. A
 #'   map needs at least 15 pseudo donors, so a cap below 15 always uses the fallback cut.
+#' @param pseudo_reps Number of random partitions of the paired donors into pseudo-removal folds
+#'   (default 1). The pseudo points of all repeats are pooled for the map.
 #' @param calibrate_seed Seed for choosing the pseudo-removed donors. The caller's RNG
 #'   state is left as it was.
 #' @param ... Passed to `COMPASS::SimpleCOMPASS()`, e.g. `iterations`,
@@ -265,7 +267,7 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' }
 cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FALSE,
                        missing_control = c("drop", "donor", "population"),
-                       missing_control_calibrate = FALSE, max_pseudo = 40L, calibrate_seed = 1L, ...) {
+                       missing_control_calibrate = FALSE, max_pseudo = 40L, calibrate_seed = 1L, pseudo_reps = 1L, ...) {
   compass_require()
   # SimpleCOMPASS() calls set.seed(): give the caller's RNG state back on exit.
   had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
@@ -357,10 +359,10 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
   calibration <- NULL
   if (!is.na(cal_method) && !is.null(scores)) {
     pseudo <- if (n_alt) compass_pseudo_fits(x, ct, fits, gid, ord, nm, null_col, category_filter, verbose,
-                                  missing_control, max_pseudo, calibrate_seed, ...)
+                                  missing_control, max_pseudo, calibrate_seed, pseudo_reps, ...)
     gs <- paste(scores$stimulation, scores$visit, scores$parent_population, sep = " | ")
     if (is.null(pseudo)) pseudo <- data.frame(group = character(), donor_id = character(), cls = character(),
-                                              fold = integer(), gamma_pseudo = numeric(), gamma_paired = numeric())
+                                              fold = integer(), rep = integer(), gamma_pseudo = numeric(), gamma_paired = numeric())
     n_failed <- if (is.null(attr(pseudo, "n_failed"))) 0L else attr(pseudo, "n_failed")
     if (n_failed) message(n_failed, " pseudo-missing refit(s) failed or could not run; the map uses the folds ",
                           "that did (see $calibration$n_failed)")

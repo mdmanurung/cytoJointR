@@ -75,42 +75,45 @@ compass_cal_fallback <- function(g) {
 # pseudo-missing donor: group, donor, class of its pseudo control, gamma under the
 # pseudo-missing fit and gamma under the paired fit.
 compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_filter, verbose,
-                                missing_control, max_pseudo, seed, ...) {
+                                missing_control, max_pseudo, seed, reps = 1L, ...) {
   todo <- unique(gid[ct$control_source != "paired" & gid %in% names(fits)])
-  pick <- compass_with_seed(seed, lapply(todo, function(g) {
-    p <- ct$contrast_id[gid == g & ct$control_source == "paired"]
-    p <- p[sample.int(length(p), min(length(p), max_pseudo))]
-    split(p, rep_len(seq_len(ceiling(length(p) / COMPASS_CAL_FOLD_SIZE)), length(p)))
-  }))
-  names(pick) <- todo
   out <- list()
   n_failed <- 0L # pseudo fits that did not run or failed
-  for (k in seq_len(max(lengths(pick), 0L))) {
-    forced <- unlist(lapply(pick, \(f) f[k][[1L]]), use.names = FALSE)
-    if (is.null(forced)) next
-    ck <- compass_resolve_controls(x, missing_control, force_missing = forced)$contrasts
-    gk <- paste(ck$stimulation, ck$visit, ck$parent_population, sep = " | ")
-    for (g in todo) {
-      ids <- pick[[g]][k][[1L]]
-      cg <- ck[gk == g, ]
-      if (is.null(ids)) next
-      if (!all(ids %in% cg$contrast_id)) { n_failed <- n_failed + 1L; next }
-      cg <- cg[order(cg$donor_id), ]
-      prep <- compass_prepare_group(cg, x, ord, nm, null_col, category_filter)
-      fit <- compass_run_group(prep, cg, verbose, ...)
-      if (is.character(fit)) { n_failed <- n_failed + 1L; next }
-      d <- cg$donor_id[cg$contrast_id %in% ids]
-      out[[length(out) + 1L]] <- data.frame(
-        group = g, donor_id = d,
-        cls = ifelse(startsWith(cg$control_source[match(d, cg$donor_id)], "donor_visit"),
-                     "donor_visit", "population"),
-        fold = k, gamma_pseudo = unname(compass_max_gamma(fit)[d]),
-        gamma_paired = unname(compass_max_gamma(fits[[g]])[d]))
+  for (r in seq_len(reps)) {
+    # A new random partition of the paired donors for each repeat.
+    pick <- compass_with_seed(seed + r - 1L, lapply(todo, function(g) {
+      p <- ct$contrast_id[gid == g & ct$control_source == "paired"]
+      p <- p[sample.int(length(p), min(length(p), max_pseudo))]
+      split(p, rep_len(seq_len(ceiling(length(p) / COMPASS_CAL_FOLD_SIZE)), length(p)))
+    }))
+    names(pick) <- todo
+    for (k in seq_len(max(lengths(pick), 0L))) {
+      forced <- unlist(lapply(pick, \(f) f[k][[1L]]), use.names = FALSE)
+      if (is.null(forced)) next
+      ck <- compass_resolve_controls(x, missing_control, force_missing = forced)$contrasts
+      gk <- paste(ck$stimulation, ck$visit, ck$parent_population, sep = " | ")
+      for (g in todo) {
+        ids <- pick[[g]][k][[1L]]
+        cg <- ck[gk == g, ]
+        if (is.null(ids)) next
+        if (!all(ids %in% cg$contrast_id)) { n_failed <- n_failed + 1L; next }
+        cg <- cg[order(cg$donor_id), ]
+        prep <- compass_prepare_group(cg, x, ord, nm, null_col, category_filter)
+        fit <- compass_run_group(prep, cg, verbose, ...)
+        if (is.character(fit)) { n_failed <- n_failed + 1L; next }
+        d <- cg$donor_id[cg$contrast_id %in% ids]
+        out[[length(out) + 1L]] <- data.frame(
+          group = g, donor_id = d,
+          cls = ifelse(startsWith(cg$control_source[match(d, cg$donor_id)], "donor_visit"),
+                       "donor_visit", "population"),
+          fold = k, rep = r, gamma_pseudo = unname(compass_max_gamma(fit)[d]),
+          gamma_paired = unname(compass_max_gamma(fits[[g]])[d]))
+      }
     }
   }
   res <- if (length(out)) do.call(rbind, out) else
     data.frame(group = character(), donor_id = character(), cls = character(), fold = integer(),
-               gamma_pseudo = numeric(), gamma_paired = numeric())
+               rep = integer(), gamma_pseudo = numeric(), gamma_paired = numeric())
   attr(res, "n_failed") <- n_failed
   res
 }

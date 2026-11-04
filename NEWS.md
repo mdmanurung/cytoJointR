@@ -6,13 +6,14 @@
   `pre_existing` marks donors COMPASS calls at both visits whose response MIMOSA2 does not
   see rise.
 
-* `cj_mimosa2()` runs MIMOSA2 (github.com/RGLab/MIMOSA2, Suggests) for baseline-adjusted
-  positivity calls: one fit per stimulation, parent population and follow-up visit, with each
-  donor's stimulated and control samples at the baseline and the follow-up visit. One subset per
-  fit: `positive = "any"` (any marker positive) or one marker. Donors without all four samples
-  are listed in `excluded`. Scores give the four counts, `delta`, `mimosa2_p_response`,
-  `mimosa2_fdr` (q-values within one fit) and `mimosa2_response`; native `MIMOSA2model`
-  objects are in `fits`.
+* `cj_mimosa2()` is a native implementation of the MIMOSA2 design (ADR 0004; no upstream code, no
+  extra package) for baseline-adjusted positivity calls: one fit per stimulation, parent
+  population and follow-up visit, with each donor's stimulated and control samples at the baseline
+  and the follow-up visit. One subset per fit: `positive = "any"` (any marker positive) or one
+  marker. Donors without all four samples are listed in `excluded`. Scores give the four counts,
+  `delta`, `mimosa2_p_response`, `mimosa2_fdr` (q-values within one fit), `mimosa2_response` and
+  `control_source`; `cj_mimosa2_fit` objects are in `fits`. `missing_control = "marginal"` lets a
+  donor with one missing control enter; it is experimental and uncalibrated.
 
 * `cj_compass(n_runs = , diagnostics = )` checks convergence of the COMPASS call. COMPASS's
   `replications` are passes of one chain, not independent chains, so the check refits with seeds

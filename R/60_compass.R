@@ -38,8 +38,11 @@ compass_shift_check <- function(counts, bits) {
 # Decide the control sample of every stimulated sample. Returns the contrasts to run
 # (with control_source, control_fallback and a control_sample_id that is NA for
 # "population") and the contrasts left out with the reason.
-compass_resolve_controls <- function(x, missing_control) {
+# `force_missing` lists contrast_ids whose control is treated as absent (pseudo-missing fits
+# used by the calibration).
+compass_resolve_controls <- function(x, missing_control, force_missing = character()) {
   ct <- x$contrasts
+  ct$control_sample_id[ct$contrast_id %in% force_missing] <- NA
   none <- is.na(ct$control_sample_id)
   ct$control_source <- ifelse(none, NA_character_, "paired")
   ct$control_fallback <- FALSE
@@ -75,6 +78,47 @@ compass_resolve_controls <- function(x, missing_control) {
     excluded$reason <- ifelse(nocontrol[drop | nocontrol], "no donor in this run has a control sample",
                               "no control sample")
   list(contrasts = ct[!drop & !nocontrol, ], excluded = excluded)
+}
+
+# Counts of one COMPASS run (one stimulation, visit and parent population) after COMPASS's
+# category filter. A sample without a control gets an all-zero row: COMPASS then uses
+# the population control.
+compass_prepare_group <- function(cg, x, ord, nm, null_col, category_filter) {
+  n_s <- x$counts[cg$stim_sample_id, ord, drop = FALSE]
+  n_u <- x$counts[match(cg$control_sample_id, rownames(x$counts)), ord, drop = FALSE]
+  n_u[is.na(cg$control_sample_id), ] <- 0L
+  n_u_raw <- n_u
+  dimnames(n_s) <- dimnames(n_u) <- list(cg$donor_id, nm)
+  # Same filter, same null-category bookkeeping as COMPASS::COMPASS().
+  del <- integer()
+  if (!is.null(category_filter)) {
+    del <- setdiff(which(!match.fun(category_filter)(n_s)), null_col)
+    if (length(del)) {
+      n_s[, null_col] <- n_s[, null_col] + rowSums(n_s[, del, drop = FALSE])
+      n_u[, null_col] <- n_u[, null_col] + rowSums(n_u[, del, drop = FALSE])
+      n_s <- n_s[, -del, drop = FALSE]; n_u <- n_u[, -del, drop = FALSE]
+    }
+  }
+  list(n_s = n_s, n_u = n_u, n_u_raw = n_u_raw, del = del)
+}
+
+# SimpleCOMPASS() on a prepared group; a COMPASSResult or the error message.
+compass_run_group <- function(prep, cg, verbose, ...) {
+  meta <- data.frame(donor_id = cg$donor_id, stimulation = cg$stimulation,
+                     visit = cg$visit, parent_population = cg$parent_population,
+                     control_source = cg$control_source)
+  # SimpleCOMPASS() skips the posterior that PosteriorDiff() and friends read;
+  # COMPASS() computes it with the same unexported helper.
+  run <- function() {
+    f <- COMPASS::SimpleCOMPASS(prep$n_s, prep$n_u, meta, "donor_id", ...)
+    f$fit$posterior <- utils::getFromNamespace("compute_posterior", "COMPASS")(f)
+    f
+  }
+  tryCatch({
+    res <- NULL
+    if (verbose) res <- run() else utils::capture.output(res <- suppressMessages(run()))
+    res
+  }, error = function(e) conditionMessage(e))
 }
 
 #' Fit COMPASS to a cytoJointR data set
@@ -172,9 +216,13 @@ compass_resolve_controls <- function(x, missing_control) {
 #' cc$scores
 #' }
 cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FALSE,
-                       missing_control = c("drop", "donor", "population"), ...) {
+                       missing_control = c("drop", "donor", "population"),
+                       missing_control_calibrate = FALSE, max_pseudo = 20L, calibrate_seed = 1L, ...) {
   compass_require()
   missing_control <- match.arg(missing_control)
+  cal_method <- if (isFALSE(missing_control_calibrate)) NA_character_ else
+    if (isTRUE(missing_control_calibrate)) "isotonic" else
+      match.arg(missing_control_calibrate, c("isotonic", "quantile"))
   if (inherits(x, "cj_fit")) x <- x$data
   if (!inherits(x, "cj_data")) stop("x must be a cj_data or cj_fit", call. = FALSE)
   if (grepl("[&!+*?()\\[\\]{}|^$\\\\]", paste(x$markers, collapse = ""), perl = TRUE))
@@ -184,7 +232,7 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
   excluded <- ct$excluded
   ct <- ct$contrasts
   n_alt <- sum(ct$control_source != "paired")
-  if (missing_control != "drop")
+  if (missing_control != "drop" && is.na(cal_method))
     message("missing_control = \"", missing_control, "\" is experimental: use it to rank donors. ",
             "In simulation (40 donors, 4 markers) the gamma > 0.5 call is not calibrated for non-paired ",
             "rows. False-positive rate among non-responders: ",
@@ -214,22 +262,9 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
   for (g in unique(gid)) {
     cg <- ct[gid == g, ]
     cg <- cg[order(cg$donor_id), ]
-    n_s <- x$counts[cg$stim_sample_id, ord, drop = FALSE]
-    # A sample without a control gets an all-zero row: COMPASS then uses the population control.
-    n_u <- x$counts[match(cg$control_sample_id, rownames(x$counts)), ord, drop = FALSE]
-    n_u[is.na(cg$control_sample_id), ] <- 0L
-    n_u_raw <- n_u
-    dimnames(n_s) <- dimnames(n_u) <- list(cg$donor_id, nm)
-    # Same filter, same null-category bookkeeping as COMPASS::COMPASS().
-    del <- integer()
-    if (!is.null(category_filter)) {
-      del <- setdiff(which(!match.fun(category_filter)(n_s)), null_col)
-      if (length(del)) {
-        n_s[, null_col] <- n_s[, null_col] + rowSums(n_s[, del, drop = FALSE])
-        n_u[, null_col] <- n_u[, null_col] + rowSums(n_u[, del, drop = FALSE])
-        n_s <- n_s[, -del, drop = FALSE]; n_u <- n_u[, -del, drop = FALSE]
-      }
-    }
+    prep <- compass_prepare_group(cg, x, ord, nm, null_col, category_filter)
+    del <- prep$del
+    n_u_raw <- prep$n_u_raw
     key <- cg[1, c("stimulation", "visit", "parent_population")]
     filters[[g]] <- cbind(group = g, key, n_patterns = length(nm), n_removed = length(del),
                           removed = paste(nm[del], collapse = "; "),
@@ -237,21 +272,7 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
                           cells_moved_control = sum(n_u_raw[, del]),
                           n_zero_control = sum(is.na(cg$control_sample_id)),
                           row.names = NULL)
-    meta <- data.frame(donor_id = cg$donor_id, stimulation = cg$stimulation,
-                       visit = cg$visit, parent_population = cg$parent_population,
-                       control_source = cg$control_source)
-    # SimpleCOMPASS() skips the posterior that PosteriorDiff() and friends read;
-    # COMPASS() computes it with the same unexported helper.
-    run <- function() {
-      f <- COMPASS::SimpleCOMPASS(n_s, n_u, meta, "donor_id", ...)
-      f$fit$posterior <- utils::getFromNamespace("compute_posterior", "COMPASS")(f)
-      f
-    }
-    fit <- tryCatch({
-      res <- NULL
-      if (verbose) res <- run() else utils::capture.output(res <- suppressMessages(run()))
-      res
-    }, error = function(e) conditionMessage(e))
+    fit <- compass_run_group(prep, cg, verbose, ...)
     ok <- !is.character(fit)
     groups[[g]] <- cbind(group = g, key, n_donors = nrow(cg),
                          status = if (ok) "fitted" else paste("failed:", fit), row.names = NULL)
@@ -265,6 +286,7 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
     tidy[[g]] <- data.frame(
       contrast_id = cg$contrast_id, donor_id = cg$donor_id, stimulation = cg$stimulation,
       visit = cg$visit, parent_population = cg$parent_population,
+      compass_max_gamma = unname(compass_max_gamma(fit)[cg$donor_id]),
       compass_FS = unname(COMPASS::FunctionalityScore(fit)[cg$donor_id]),
       compass_PFS = unname(COMPASS::PolyfunctionalityScore(fit)[cg$donor_id]),
       compass_response_degree1 = unname(resp(1)),
@@ -273,7 +295,29 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
       control_shift_check = cg$control_shift_check)
   }
   bind <- function(l) if (length(l)) do.call(rbind, unname(l))
-  structure(list(fits = fits, scores = bind(tidy), groups = bind(groups),
+  scores <- bind(tidy)
+  calibration <- NULL
+  if (!is.na(cal_method) && !is.null(scores)) {
+    pseudo <- if (n_alt) compass_pseudo_fits(x, ct, fits, gid, ord, nm, null_col, category_filter, verbose,
+                                  missing_control, max_pseudo, calibrate_seed, ...)
+    gs <- paste(scores$stimulation, scores$visit, scores$parent_population, sep = " | ")
+    if (is.null(pseudo)) pseudo <- data.frame(group = character(), cls = character(),
+                                              gamma_pseudo = numeric(), gamma_paired = numeric())
+    cal <- compass_calibrate_scores(scores, gs, pseudo, cal_method)
+    scores <- cal$scores
+    calibration <- list(table = cal$info, pseudo = pseudo)
+    n_fb <- sum(scores$calibration %in% "fallback")
+    low <- !is.na(cal$info$pseudo_auc) & cal$info$pseudo_auc < COMPASS_CAL_MIN_AUC
+    if (n_alt) message("missing_control_calibrate: ", sum(scores$calibration %in% cal_method), " row(s) mapped onto the ",
+            "paired scale (", cal_method, "), ", n_fb, " on the fallback cut (too few paired donors); ",
+            "use compass_call, not max gamma > 0.5. Calibrated in simulation only; ",
+            "see docs/adr/0003-compass-missing-control.md.")
+    if (any(low))
+      warning("In ", sum(low), " group(s) a pseudo-missing control does not rank donors like the paired ",
+              "control (AUC < ", COMPASS_CAL_MIN_AUC, "); calibrated calls there are unreliable, see ",
+              "$calibration$table", call. = FALSE)
+  }
+  structure(list(fits = fits, scores = scores, groups = bind(groups), calibration = calibration,
                  filters = bind(filters), excluded = excluded,
                  note = paste("COMPASS FS, PFS and response probabilities are COMPASS",
                               "quantities, not cytoJointR sign probabilities.")),

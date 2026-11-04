@@ -6,7 +6,7 @@
   NICR and Poly-NICR with a cell bootstrap. The default magnitude is C0-EB,
   an empirical-Bayes pooled conjugate model that needs no Stan (`"c0"` is the
   plain independent Dirichlet); `magnitude_model = "m1dm"` uses the
-  structured posterior. A `concordance` column flags a COMPASS call whose RMS
+  structured posterior. C0-EB warns for a parent population with fewer than 8 donor-visit blocks, fills a partial `epsilon` from the defaults, and warns when `a0`, `n_draws` or `fit_args` are ignored. A `concordance` column flags a COMPASS call whose RMS
   interval includes 0, and the reverse. `cj_plot_compass_report()` draws the
   table as a forest plot with the COMPASS response as point colour.
 

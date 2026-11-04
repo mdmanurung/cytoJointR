@@ -113,7 +113,24 @@ grid, per parent population and stimulation, with a floor of 0.2 on the log
 scale. The stimulated counts also inform \code{q}, so the baseline, which drives
 the true RMS when responses are rare, is estimated from both samples. Within
 the positive patterns each sample keeps C0's Dirichlet(\code{a0} + counts). Extra
-arguments (\code{sd_min}, \code{pool_patterns}) go in \code{fit_args}.
+arguments (\code{sd_min}, \code{pool_patterns}, \code{null_mass}) go in \code{fit_args}. A parent
+population with fewer than 8 donor-visit blocks gets a warning: the
+across-donor hyperparameters are then poorly determined (use \code{"c0"}).
+Every control sample of a donor and visit measures the same baseline and
+shares one \code{q} draw.
+
+Because the fold change is pooled, a donor with no positive cell in either
+sample gets an interval that reflects the cohort, not the donor. When the
+cohort responds strongly the interval can lie wholly above 0 (for example
+3e-5 to 3e-4 for a 10,000-cell sample), because the model says "if this donor
+responds like the others, the effect is about this small". Its lower end stays
+below the default \code{magnitude_floor} of 1e-4, so the donor is not
+\code{magnitude_positive} and no \code{magnitude_without_response} flag is raised; with
+\code{magnitude_floor = 0} it would be. A mixture with a point mass at no response
+(\code{fit_args = list(null_mass = TRUE)}) did not change this when every donor
+responds (the fitted mass was 0.001), and in dev simulations it cut false
+flags at the cost of power (rare, weak: true positives 0.64 to 0.53, false
+flags among non-responders 0.19 to 0.10, pooled Spearman -0.02), so it is off.
 
 \code{"c0"} is the plain conjugate model: an independent Dirichlet(\code{a0} + counts)
 per sample, no pooling. \code{"m1dm"} calls \code{cj_fit(model = "m1dm", level = "sample")}, which pools donors in Stan and needs CmdStan (14 to 24 seconds for

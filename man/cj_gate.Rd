@@ -100,7 +100,11 @@ valley gate only works when the pooled control has a visible positive mode.
 scale. It is also used when only \code{thresholds} is given.
 \item \code{"auto"}: per marker, \code{"tail"} or \code{"quantile"}, chosen from the shape of the
 pooled control distribution alone (see below). \code{method_used} and \verb{$auto}
-record the choice.
+record the choice. \strong{Experimental.} It helps in simulation when the negative
+peak has a heavy upper tail, but the held-out comparison with expert gates did
+not support it (see the \code{from-cells} vignette): it lowered agreement on the
+markers where it switched. Use the \verb{$auto} table as a diagnostic, and prefer
+\code{"tail"} with \code{by} and \code{cofactor = "auto"}.
 }
 
 \strong{The automatic rule.} The tail rule extrapolates a Gaussian from the lower

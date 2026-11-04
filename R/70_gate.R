@@ -112,7 +112,11 @@ gate_cut_mindensity <- function(x, marker, ...) {
 #'   scale. It is also used when only `thresholds` is given.
 #' * `"auto"`: per marker, `"tail"` or `"quantile"`, chosen from the shape of the
 #'   pooled control distribution alone (see below). `method_used` and `$auto`
-#'   record the choice.
+#'   record the choice. **Experimental.** It helps in simulation when the negative
+#'   peak has a heavy upper tail, but the held-out comparison with expert gates did
+#'   not support it (see the `from-cells` vignette): it lowered agreement on the
+#'   markers where it switched. Use the `$auto` table as a diagnostic, and prefer
+#'   `"tail"` with `by` and `cofactor = "auto"`.
 #'
 #' **The automatic rule.** The tail rule extrapolates a Gaussian from the lower
 #' half of the negative peak. The statistic is the *tail ratio*: the distance

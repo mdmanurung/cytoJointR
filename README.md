@@ -48,6 +48,10 @@ fs <- cj_fluorescence_scores(x, n_boot = 200, seed = 1)  # NICR, Poly-NICR, FIS,
 cp <- cj_run_compass(x)                         # needs COMPASS
 ```
 
+For raw fluorescence with batch shifts, `cofactor = "auto"` and `by = "<batch column>"`
+set the asinh cofactor from the negative-peak width and give one cut per batch;
+`print(gate)` and `cj_plot_gate(gate)` show three QC flags per marker.
+
 `cj_quickstart()` runs these in one call. `vignette("from-cells")` has the details.
 
 `vignette("cytoJointR")` walks through the full workflow.

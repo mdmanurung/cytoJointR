@@ -78,12 +78,17 @@ gate_cofactor <- function(x, k = GATE_COFACTOR_K) {
   k * gate_peak(core)[["spread"]]
 }
 
+# gate_cofactor() with the marker named in any error.
+gate_cofactor_marker <- function(marker, x, k = GATE_COFACTOR_K) {
+  tryCatch(gate_cofactor(as.numeric(x), k),
+           error = function(e) stop("cofactor for marker ", marker, ": ", conditionMessage(e), call. = FALSE))
+}
+
 # Per-event batch labels of the control events, and the sample -> batch map.
 gate_batch_map <- function(samples, by) {
   if (!is.character(by) || length(by) != 1L || !by %in% names(samples))
     stop("by must be the name of one column of samples", call. = FALSE)
   b <- as.character(samples[[by]])
-  if (anyNA(b)) stop("samples$", by, " has missing values; every sample needs a batch", call. = FALSE)
   stats::setNames(b, as.character(samples$sample_id))
 }
 
@@ -116,8 +121,21 @@ gate_batch_cuts <- function(X, bev, all_batches, pooled, eff, min_events, probs,
 #  * high_control_positive: control events above the tail-rule cut exceed qc[["max_control_pos"]].
 #  * batch_cut_spread:    range of the batch cuts over the typical negative-peak spread
 #                         exceeds qc[["batch_spread"]] (only with `by`).
-gate_qc <- function(X, cut_ev, tailcut_ev, batch, qc) {
+gate_qc <- function(X, cut_ev, tailcut_ev, batch, qc, fallback = character()) {
+  na_row <- function(m) data.frame(marker = m, cut_density_ratio = NA_real_, pct_control_pos = NA_real_,
+    pct_control_pos_tailrule = NA_real_, batch_cut_spread = NA_real_, cut_in_broad_tail = NA,
+    high_control_positive = NA, batch_cut_spread_flag = NA, batch_without_control = length(fallback) > 0L,
+    batch_fallback = paste(fallback, collapse = ","), stringsAsFactors = FALSE)
   rows <- lapply(colnames(X), function(m) {
+    # Too few control events (a manual gate needs none): no flags, NA numbers.
+    if (nrow(X) < 2L) return(na_row(m))
+    tryCatch(gate_qc_marker(X, m, cut_ev, tailcut_ev, batch, qc, fallback), error = function(e) na_row(m))
+  })
+  do.call(rbind, rows)
+}
+
+gate_qc_marker <- function(X, m, cut_ev, tailcut_ev, batch, qc, fallback) {
+  {
     xc <- X[, m] - cut_ev[, m]
     if (length(xc) > 2e5) xc <- xc[round(seq(1, length(xc), length.out = 2e5))]
     d <- stats::density(xc)
@@ -134,15 +152,17 @@ gate_qc <- function(X, cut_ev, tailcut_ev, batch, qc) {
                pct_control_pos_tailrule = 100 * pos_tail, batch_cut_spread = spread,
                cut_in_broad_tail = dens > qc[["tail_density"]],
                high_control_positive = isTRUE(pos_tail > qc[["max_control_pos"]]),
-               batch_cut_spread_flag = isTRUE(spread > qc[["batch_spread"]]), stringsAsFactors = FALSE)
-  })
-  do.call(rbind, rows)
+               batch_cut_spread_flag = isTRUE(spread > qc[["batch_spread"]]),
+               batch_without_control = length(fallback) > 0L, batch_fallback = paste(fallback, collapse = ","),
+               stringsAsFactors = FALSE)
+  }
 }
 
 # Flag names set for one marker, as a short string.
 gate_flag_text <- function(qc) {
   f <- cbind(cut_in_broad_tail = qc$cut_in_broad_tail, high_control_positive = qc$high_control_positive,
-             batch_cut_spread = qc$batch_cut_spread_flag)
+             batch_cut_spread = qc$batch_cut_spread_flag, batch_without_control = qc$batch_without_control)
+  f[is.na(f)] <- FALSE
   vapply(seq_len(nrow(f)), function(i) paste(colnames(f)[f[i, ]], collapse = ", "), "")
 }
 
@@ -177,7 +197,7 @@ cj_cofactor <- function(cells, markers, samples, control = "control", k = GATE_C
   samples <- recode_control(samples, control)
   is_ctrl <- as.character(cells$sample_id) %in% as.character(samples$sample_id[samples$condition == CONTROL_CONDITION])
   if (sum(is_ctrl) < 100L) stop("only ", sum(is_ctrl), " control events", call. = FALSE)
-  vapply(names(markers), function(m) gate_cofactor(as.numeric(cells[[markers[[m]]]][is_ctrl]), k), numeric(1))
+  vapply(names(markers), function(m) gate_cofactor_marker(m, cells[[markers[[m]]]][is_ctrl], k), numeric(1))
 }
 
 #' Simulate cells with controlled control-distribution shapes

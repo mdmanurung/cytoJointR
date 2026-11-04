@@ -63,14 +63,21 @@ test_that("auto keeps the tail cut with too few control events and says so", {
   expect_match(g$auto$reason, "too few control events")
 })
 
-test_that("auto beats tail against the truth on a skewed negative peak", {
-  k <- vapply(1:4, function(i) {
+test_that("auto beats tail against the truth where it must choose the quantile", {
+  rows <- lapply(1:8, function(i) {
     s <- gh_sim("skewed", seed = 10 + i)
+    ga <- gh_gate(s, method = "auto")
     tr <- s$cells$truth_M
-    c(tail = gh_kappa(s$cells$M > gh_gate(s)$thresholds[["M"]], tr),
-      auto = gh_kappa(s$cells$M > gh_gate(s, method = "auto")$thresholds[["M"]], tr))
-  }, c(tail = 0, auto = 0))
-  expect_gte(mean(k["auto", ]), mean(k["tail", ]))
+    data.frame(choice = ga$auto$choice,
+               tail = gh_kappa(s$cells$M > gh_gate(s)$thresholds[["M"]], tr),
+               auto = gh_kappa(s$cells$M > ga$thresholds[["M"]], tr))
+  })
+  d <- do.call(rbind, rows)
+  q <- d[d$choice == "quantile", ]
+  expect_gte(nrow(q), 3L)   # the test is void unless auto actually switched
+  expect_gt(mean(q$auto), mean(q$tail))
+  # and where it keeps the tail cut it is the tail cut
+  expect_equal(d$auto[d$choice == "tail"], d$tail[d$choice == "tail"])
 })
 
 test_that("by = batch finds each batch's own cut and tracks batch offsets", {
@@ -123,7 +130,7 @@ test_that("by input is checked", {
   expect_error(gh_gate(s, by = "nope"), "column of samples")
   expect_error(gh_gate(s, method = "manual", thresholds = c(M = 1), by = "batch"), "not used with")
   s2 <- s; s2$samples$batch[1] <- NA
-  expect_error(gh_gate(s2, by = "batch"), "missing values")
+  expect_error(gh_gate(s2, by = "batch"), "control sample")
 })
 
 test_that("QC flags: silent on a clean marker, firing on heavy-tailed and wide-background markers", {
@@ -192,4 +199,109 @@ test_that("simulator returns a truth column per marker and respects the batch de
   expect_equal(nrow(s$samples), 2 * 2 * 2)
   expect_lt(mean(s$cells$truth_A[s$cells$condition == "unstim"]), 0.01)
   expect_gt(mean(s$cells$truth_A[s$cells$condition == "stim"]), 0.1)
+})
+
+# A 3-batch design in which every control event of batch B3 is removed.
+gh_no_ctrl_b3 <- function(seed = 8) {
+  s <- gh_sim("clean", batches = 3, shift = 2, seed = seed)
+  s$cells <- s$cells[!(s$cells$batch == "B3" & s$cells$condition == "unstim"), ]
+  s
+}
+gh_samples_cells <- function(s) {
+  samp <- s$samples
+  samp$visit <- factor("v1"); samp$parent_population <- "CD4"
+  samp
+}
+
+test_that("manual gates need no control events, and QC is NA instead of an error", {
+  s <- gh_sim("clean")
+  th <- c(M = 1)
+  zero <- s$cells[s$cells$condition == "stim", ]
+  g0 <- gh_gate(list(cells = zero, samples = s$samples), method = "manual", thresholds = th)
+  expect_identical(g0$n_control, 0L)
+  expect_true(is.na(g0$qc$cut_in_broad_tail))
+  expect_false(g0$qc$high_control_positive %in% TRUE)
+  expect_match(g0$notes, "fewer than 2 control events")
+  expect_output(print(g0), "cj_gate")
+  expect_error(cj_plot_gate(g0), "no control events")
+  one <- rbind(zero, s$cells[s$cells$condition == "unstim", ][1, ])
+  g1 <- gh_gate(list(cells = one, samples = s$samples), method = "manual", thresholds = th)
+  expect_identical(g1$n_control, 1L)
+  expect_true(is.na(g1$qc$cut_density_ratio))
+  expect_equal(g1$thresholds[["M"]], 1)
+})
+
+test_that("a stimulated batch with no controls takes the pooled cut and is flagged end to end", {
+  s <- gh_no_ctrl_b3()
+  expect_warning(g <- gh_gate(s, by = "batch"), "B3")
+  expect_true(g$qc$batch_without_control)
+  expect_identical(g$qc$batch_fallback, "B3")
+  expect_match(g$qc$flags, "batch_without_control")
+  expect_equal(g$batch_thresholds["B3", "M"], g$thresholds[["M"]])
+  expect_true(any(grepl("batch_without_control", capture.output(print(g)))))
+  expect_true(any(grepl("batch_without_control", levels(cj_plot_gate(g)$data$marker))))
+  x <- cj_from_cells(s$cells, samples = gh_samples_cells(s), gate = g)
+  b3 <- s$cells$batch == "B3"
+  per_sample <- tapply(s$cells$M[b3] > g$thresholds[["M"]], s$cells$sample_id[b3], sum)
+  expect_equal(unname(x$counts[names(per_sample), 2L]), unname(as.integer(per_sample)))
+  # a batch with controls does not raise the flag
+  expect_false(gh_gate(gh_sim("clean", batches = 3, shift = 2, seed = 8), by = "batch")$qc$batch_without_control)
+})
+
+test_that("NA batch: allowed for samples absent from cells, a warning for stimulated, an error for control", {
+  s <- gh_sim("clean", batches = 2, shift = 2, seed = 9)
+  absent <- s; absent$samples <- rbind(s$samples, data.frame(sample_id = "GHOST", donor_id = "G", condition = "stim", batch = NA))
+  expect_no_error(g <- gh_gate(absent, by = "batch"))
+  expect_false(g$qc$batch_without_control)
+  # stimulated sample with NA batch
+  st <- s$samples$sample_id[s$samples$condition == "stim"][1]
+  na_stim <- s; na_stim$samples$batch[na_stim$samples$sample_id == st] <- NA
+  expect_warning(g2 <- gh_gate(na_stim, by = "batch"), "no batch")
+  expect_true(g2$qc$batch_without_control)
+  x <- cj_from_cells(na_stim$cells, samples = gh_samples_cells(na_stim), gate = g2)
+  i <- na_stim$cells$sample_id == st
+  expect_equal(unname(x$counts[st, 2L]), sum(na_stim$cells$M[i] > g2$thresholds[["M"]]))
+  # control sample with NA batch
+  ct <- s$samples$sample_id[s$samples$condition == "unstim"][1]
+  na_ctrl <- s; na_ctrl$samples$batch[na_ctrl$samples$sample_id == ct] <- NA
+  expect_error(gh_gate(na_ctrl, by = "batch"), "control sample")
+})
+
+test_that("fluorescence scores of a by-batch gate equal the batch-cut brute force", {
+  s <- gh_sim("clean", markers = c("A", "B"), batches = 3, shift = 2, seed = 12)
+  g <- cj_gate(s$cells, c("A", "B"), s$samples, method = "quantile", transform = "none",
+               control = "unstim", by = "batch")
+  x <- cj_from_cells(s$cells, samples = gh_samples_cells(s), gate = g)
+  fs <- suppressMessages(cj_fluorescence_scores(x))
+  ct <- x$contrasts[!is.na(x$contrasts$control_sample_id), ]
+  expect_gt(nrow(ct), 3L)
+  burden <- function(id, m) {
+    d <- s$cells[s$cells$sample_id == id, ]
+    cut <- g$batch_thresholds[d$batch, m]
+    sum((d[[m]] - cut)[d[[m]] > cut]) / nrow(d)
+  }
+  for (r in seq_len(nrow(ct))) for (m in c("A", "B")) {
+    row <- fs[fs$contrast_id == ct$contrast_id[r] & fs$marker == m, ]
+    expect_equal(row$nicr, burden(ct$stim_sample_id[r], m) - burden(ct$control_sample_id[r], m), tolerance = 1e-10)
+  }
+})
+
+test_that("cj_from_cells(cofactor = 'auto') builds a gate with per-marker cofactors", {
+  s <- gh_sim("clean", markers = c("A", "B"), seed = 14)
+  raw <- s$cells
+  raw[c("A", "B")] <- 500 * (raw[c("A", "B")] + 0)
+  x <- cj_from_cells(raw, c("A", "B"), gh_samples_cells(s), transform = "asinh", cofactor = "auto",
+                     control = "unstim")
+  expect_match(x$gate$transform$label, "cofactor per marker")
+  cf <- cj_cofactor(raw, c("A", "B"), s$samples, control = "unstim")
+  expect_equal(x$gate$thresholds[["A"]], cj_gate(raw, c("A", "B"), s$samples, transform = "asinh",
+               cofactor = cf, control = "unstim")$thresholds[["A"]])
+})
+
+test_that("cofactor = 'auto' errors name the marker", {
+  cells <- data.frame(sample_id = "c1", A = rnorm(500, 0, 100), Z = 0)
+  samples <- data.frame(sample_id = "c1", condition = "unstim")
+  expect_error(cj_gate(cells, c(A = "A", Z = "Z"), samples, transform = "asinh", cofactor = "auto",
+                       control = "unstim"), "marker Z")
+  expect_error(cj_cofactor(cells, c(A = "A", Z = "Z"), samples, control = "unstim"), "marker Z")
 })

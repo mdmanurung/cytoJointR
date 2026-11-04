@@ -157,9 +157,16 @@ gate_cut_mindensity <- function(x, marker, ...) {
 #'   cytokine-positive events, or a heavy negative tail, exceed this. (The
 #'   percentage above the cut actually used is also in `$qc`; for a quantile cut
 #'   it is fixed near `100 * (1 - probs)`.)
+#' * `batch_without_control`: with `by`, a batch (or a sample with an `NA` batch) had no
+#'   usable batch cut (too few control events, or none) and uses the pooled cut. It is
+#'   listed in `$qc$batch_fallback`. `batch_cut_spread` cannot judge such a batch.
 #' * `batch_cut_spread`: with `by`, the range of the batch cuts is more than one
 #'   negative-peak spread. The batches then disagree about where the negative
 #'   population ends, so a pooled cut would be wrong for some of them.
+#'
+#' With fewer than 2 control events (a `"manual"` gate needs none) the QC numbers are
+#' `NA`, no flag is raised and a note says so. A control sample with an `NA` batch is an
+#' error; a stimulated sample with an `NA` batch warns and takes the pooled cut.
 #'
 #' All control events are pooled within a batch (or entirely, without `by`). The
 #' gate depends on the control events only, never on stimulated ones.
@@ -236,16 +243,25 @@ cj_gate <- function(cells, markers, samples, method = c("tail", "mindensity", "q
     if (!identical(transform, "asinh")) stop("cofactor = \"auto\" needs transform = \"asinh\"", call. = FALSE)
     if (sum(is_ctrl) < 100L) stop("only ", sum(is_ctrl), " control events; a pooled gate needs at least 100", call. = FALSE)
     cofactor <- vapply(names(markers), function(m)
-      gate_cofactor(as.numeric(cells[[markers[[m]]]][is_ctrl])), numeric(1))
+      gate_cofactor_marker(m, cells[[markers[[m]]]][is_ctrl]), numeric(1))
   }
   tr <- gate_transform(transform, cofactor)
   X <- gate_matrix(cells[is_ctrl, , drop = FALSE], markers, tr)
   notes <- character()
   bmap <- bev <- NULL
   if (!is.null(by)) {
-    bmap <- gate_batch_map(samples, by)
+    # Only samples that have events are mapped: a sample absent from `cells` may have an NA batch.
+    bmap <- gate_batch_map(samples[as.character(samples$sample_id) %in% as.character(cells$sample_id), , drop = FALSE], by)
+    if (!all(as.character(cells$sample_id) %in% names(bmap))) stop("cells has sample_id not in samples", call. = FALSE)
     bev <- unname(bmap[as.character(cells$sample_id[is_ctrl])])
-    if (anyNA(bev)) stop("cells has sample_id not in samples", call. = FALSE)
+    if (anyNA(bev))
+      stop("control sample(s) with no batch (NA in samples$", by, "): ",
+           paste(unique(as.character(cells$sample_id[is_ctrl])[is.na(bev)]), collapse = ", "), call. = FALSE)
+    # A stimulated sample with an NA batch has no batch cut to use: it takes the pooled cut, with a warning.
+    na_samples <- names(bmap)[is.na(bmap)]
+    if (length(na_samples))
+      warning(length(na_samples), " sample(s) have no batch (NA in samples$", by, ") and use the pooled cut: ",
+              paste(utils::head(na_samples, 5), collapse = ", "), call. = FALSE)
   }
   auto <- batch <- NULL
 
@@ -283,7 +299,7 @@ cj_gate <- function(cells, markers, samples, method = c("tail", "mindensity", "q
     th <- vapply(names(markers), function(m) gate_cut(eff[[m]], X[, m], m, probs, tail_p, ...), numeric(1))
     used <- eff[names(th)]
     if (!is.null(bev)) {
-      all_b <- sort(unique(unname(bmap)))
+      all_b <- sort(unique(stats::na.omit(unname(bmap))))
       batch <- gate_batch_cuts(X, bev, all_b, th, eff, min_batch_events, probs, tail_p, ...)
       few <- all_b[!all_b %in% batch$ok]
       if (length(few))
@@ -296,17 +312,19 @@ cj_gate <- function(cells, markers, samples, method = c("tail", "mindensity", "q
   }
 
   # QC flags: cut and tail-rule cut that apply to each control event.
-  cut_ev <- matrix(rep(th, each = nrow(X)), nrow(X), dimnames = list(NULL, names(th)))
+  cut_ev <- matrix(rep(th, each = nrow(X)), nrow(X), length(th), dimnames = list(NULL, names(th)))
+  if (nrow(X) < 2L) notes <- c(notes, "fewer than 2 control events: QC flags not computed")
   tail_pooled <- vapply(names(markers), function(m)
     tryCatch(gate_cut_tail(X[, m], tail_p), error = function(e) NA_real_), numeric(1))
-  tailcut_ev <- matrix(rep(tail_pooled, each = nrow(X)), nrow(X), dimnames = list(NULL, names(th)))
+  tailcut_ev <- matrix(rep(tail_pooled, each = nrow(X)), nrow(X), length(th), dimnames = list(NULL, names(th)))
   if (!is.null(batch)) {
     cut_ev[] <- batch$cut[bev, names(th)]
     tc <- batch$tailcut
     tc[is.na(tc)] <- matrix(rep(tail_pooled, each = nrow(tc)), nrow(tc))[is.na(tc)]
     tailcut_ev[] <- tc[bev, names(th)]
   }
-  qcdf <- gate_qc(X, cut_ev, tailcut_ev, batch, qc)
+  fallback <- c(if (!is.null(batch)) setdiff(names(batch$n), batch$ok), if (!is.null(bmap)) na_samples)
+  qcdf <- gate_qc(X, cut_ev, tailcut_ev, batch, qc, fallback)
   qcdf$flags <- gate_flag_text(qcdf)
   out <- list(thresholds = th, markers = markers, method = method, method_used = used,
               transform = tr, control = control, n_control = nrow(X), control_values = X,

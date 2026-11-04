@@ -70,9 +70,12 @@ cj_from_cells <- function(cells, markers = NULL, samples, gate = NULL, transform
   X <- gate_matrix(cells, mk, gate$transform)
   if (!is.null(gate$by)) {
     # Per-batch gate: move each event by its batch cut minus the pooled cut, so one cut `th` applies to all.
-    b <- unname(gate$batch_of_sample[as.character(cells$sample_id)])
-    if (anyNA(b)) stop("cells has sample_id the gate has no batch for", call. = FALSE)
-    X <- X - sweep(gate$batch_thresholds[b, names(mk), drop = FALSE], 2L, th)
+    sid <- as.character(cells$sample_id)
+    if (!all(sid %in% names(gate$batch_of_sample))) stop("cells has sample_id the gate has no batch for", call. = FALSE)
+    b <- unname(gate$batch_of_sample[sid])
+    shift <- sweep(gate$batch_thresholds[ifelse(is.na(b), rownames(gate$batch_thresholds)[1L], b), names(mk), drop = FALSE], 2L, th)
+    shift[is.na(b), ] <- 0 # NA batch: pooled cut
+    X <- X - shift
     dimnames(X) <- list(NULL, names(mk))
   }
   ev <- data.frame(sample_id = as.character(cells$sample_id), X, check.names = FALSE)

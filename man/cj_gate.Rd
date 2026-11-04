@@ -147,10 +147,17 @@ tail-rule cut. A clean control has 0.1\% by construction. Unstimulated
 cytokine-positive events, or a heavy negative tail, exceed this. (The
 percentage above the cut actually used is also in \verb{$qc}; for a quantile cut
 it is fixed near \code{100 * (1 - probs)}.)
+\item \code{batch_without_control}: with \code{by}, a batch (or a sample with an \code{NA} batch) had no
+usable batch cut (too few control events, or none) and uses the pooled cut. It is
+listed in \verb{$qc$batch_fallback}. \code{batch_cut_spread} cannot judge such a batch.
 \item \code{batch_cut_spread}: with \code{by}, the range of the batch cuts is more than one
 negative-peak spread. The batches then disagree about where the negative
 population ends, so a pooled cut would be wrong for some of them.
 }
+
+With fewer than 2 control events (a \code{"manual"} gate needs none) the QC numbers are
+\code{NA}, no flag is raised and a note says so. A control sample with an \code{NA} batch is an
+error; a stimulated sample with an \code{NA} batch warns and takes the pooled cut.
 
 All control events are pooled within a batch (or entirely, without \code{by}). The
 gate depends on the control events only, never on stimulated ones.

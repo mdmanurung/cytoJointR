@@ -9,6 +9,8 @@ cj_compass(
   category_filter = COMPASS_DEFAULT_FILTER,
   verbose = FALSE,
   missing_control = c("drop", "donor", "population"),
+  n_runs = 1L,
+  diagnostics = FALSE,
   ...
 )
 }
@@ -23,6 +25,14 @@ cj_compass(
 sample at its visit: \code{"drop"}, \code{"donor"} or \code{"population"}. See \emph{Missing
 control samples}.}
 
+\item{n_runs}{Number of COMPASS fits per run group, with seeds \code{seed},
+\code{seed + 1}, ... (\code{seed} defaults to COMPASS's 100). The first fit is the
+one reported in \code{fits} and in the score columns, so \code{n_runs = 1} is the old
+behaviour. With \code{n_runs > 1} the extra fits feed the convergence columns
+described in \emph{Convergence diagnostics} and are then dropped.}
+
+\item{diagnostics}{\code{TRUE} is \code{n_runs = max(n_runs, 4)}.}
+
 \item{...}{Passed to \code{COMPASS::SimpleCOMPASS()}, e.g. \code{iterations},
 \code{replications}, \code{seed}. COMPASS's defaults apply when omitted.}
 }
@@ -30,9 +40,11 @@ control samples}.}
 A \code{cj_compass} list with \code{fits} (named list of \code{COMPASSResult}),
 \code{scores} (tidy table with \code{compass_FS}, \code{compass_PFS},
 \code{compass_response_degree1}, \code{compass_response_degree2}, \code{control_source},
-\code{control_fallback}, \code{control_shift_check}), \code{groups} (one
+\code{control_fallback}, \code{control_shift_check}, and with \code{n_runs > 1} the
+convergence columns), \code{groups} (one
 row per COMPASS run with its status), \code{filters} (what the category filter
-removed per run) and \code{excluded} (contrasts left out, with the reason).
+removed per run), \code{excluded} (contrasts left out, with the reason) and
+\code{diagnostics} (\code{NULL}, or with \code{n_runs > 1} a list: \code{n_runs}, \code{seeds}, \code{summary}).
 }
 \description{
 Runs one \code{COMPASS::SimpleCOMPASS()} per stimulation, visit and parent
@@ -105,6 +117,34 @@ two-sample proportion test and a fold difference, both fixed a priori and not
 tuned on benchmark data). \code{control_shift_check} is \code{"ok"}, \code{"differs"} or
 \code{"untestable"} (only one control to borrow), and \code{"differs"} or \code{"untestable"}
 gives a warning. See \code{docs/adr/0003-compass-missing-control.md}.
+}
+
+\section{Convergence diagnostics}{
+
+COMPASS's \code{replications} are not independent chains. They are extra passes of
+one Gibbs chain, thinned by \code{replications}, and the model runs one chain per
+call. \code{n_runs > 1} therefore refits with different seeds and treats the fits
+as chains. For each donor, from the per-iteration subset indicators \code{gamma}:
+\itemize{
+\item \code{compass_gamma_rhat}, \code{compass_gamma_ess}: rank-normalised R-hat and bulk
+ESS (\code{\link[posterior:rhat]{posterior::rhat()}}, \code{\link[posterior:ess_bulk]{posterior::ess_bulk()}}) of the mean of \code{gamma}
+over the non-null subsets;
+\item \code{compass_FS_rhat}, \code{compass_FS_ess}, \code{compass_PFS_rhat}, \code{compass_PFS_ess}:
+the same for COMPASS's FS and PFS formulas applied to each iteration;
+\item \code{compass_runs_called}: runs in which the donor's call (max over subsets of
+mean \code{gamma} > 0.5) is positive, and \code{compass_max_gamma}, the mean over runs
+of that maximum;
+\item \code{unstable_call}: \code{TRUE} when the runs disagree on the call (some, not all,
+are positive; \code{compass_call_disagree}) or the largest of the three R-hats
+exceeds 1.05 (\code{compass_rhat_high}).
+}
+
+\code{diagnostics$summary} counts the flagged donors per run group and gives the
+worst R-hat, the lowest ESS and the seconds the group took. The cost is about
+\code{n_runs} times that of one fit. An R-hat of 1 with an ESS of \code{NA} means every
+run sat on one value. The thresholds are fixed a priori (1.05, 0.5), not tuned.
+A flagged donor needs more \code{iterations} (or a closer look); an unflagged donor
+only shows that these runs agree.
 }
 
 \examples{

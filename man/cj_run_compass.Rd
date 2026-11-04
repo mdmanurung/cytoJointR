@@ -12,6 +12,8 @@ cj_run_compass(
   transform = NULL,
   control = "control",
   missing_control = c("drop", "donor", "population"),
+  n_runs = 1L,
+  diagnostics = FALSE,
   ...,
   gate_args = list()
 )
@@ -25,6 +27,8 @@ data frame; see \code{\link[=cj_from_cells]{cj_from_cells()}}. \code{samples} is
 \item{missing_control}{What to do with stimulated samples that have no
 control: \code{"drop"} (default), \code{"donor"} or \code{"population"}; see \code{\link[=cj_compass]{cj_compass()}}.
 The table gets \code{control_source}, \code{control_fallback} and \code{control_shift_check}.}
+
+\item{n_runs, diagnostics}{Convergence diagnostics; see \code{\link[=cj_compass]{cj_compass()}}.}
 
 \item{...}{Passed to \code{\link[=cj_compass]{cj_compass()}} (for example \code{iterations}, \code{replications},
 \code{seed}).}

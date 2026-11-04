@@ -1,5 +1,16 @@
 # cytoJointR 0.0.0.9000
 
+* `cj_compass(n_runs = , diagnostics = )` checks convergence of the COMPASS call. COMPASS's
+  `replications` are passes of one chain, not independent chains, so the check refits with seeds
+  `seed`, `seed + 1`, ... (`diagnostics = TRUE` means at least 4 runs) and treats the fits as chains.
+  Per donor and stimulation, `scores` gains rank-normalised R-hat and bulk ESS of the posterior
+  response probability (mean of `gamma`), FS and PFS (`compass_gamma_rhat`, `compass_FS_ess`, ...), the
+  number of runs that call the donor (max mean `gamma` > 0.5), and `unstable_call`: the runs disagree
+  on that call or an R-hat exceeds 1.05. `cj_compass()$diagnostics$summary` counts flagged donors and
+  gives the runtime. The reported scores are those of the first run, so `n_runs = 1` (default) is
+  unchanged. `cj_run_compass()` passes both arguments on. Needs the posterior package. The check costs
+  about `n_runs` times one fit.
+
 * `cj_compass(missing_control = c("drop", "donor", "population"))` runs COMPASS on
   stimulated samples that have no control sample. `"drop"` (default) is the old
   behaviour. `"donor"` borrows the same donor's control from the nearest other

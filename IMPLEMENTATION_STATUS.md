@@ -37,6 +37,7 @@ Test files are in `tests/testthat/`.
 | 4 | Per-donor score draws exported (`cj_score_draws()`) | DONE | `test-scores.R`, `helper-scores-draws.R` |
 | 5 | COMPASS adapter: FS, PFS, `Response()`, filters, heatmap | DONE | `test-compass.R` |
 | 5 | COMPASS without a control sample: `missing_control = "donor"` or `"population"`, `control_source` | DONE | `test-compass.R`; calibration `scripts/75_calibrate-compass-missing-control.R`, `runs/2026-11-07_compass-missing-control/`; `docs/adr/0003` |
+| 5 | COMPASS convergence diagnostics: `n_runs`, `diagnostics`, R-hat/ESS of gamma, FS, PFS, `unstable_call` | DONE | `test-compass-diagnostics.R`; validation `scripts/97_compass-convergence-sim.R`, `runs/2026-11-08_compass-diagnostics/` |
 | 5 | COMPASS posterior differences | PARTIAL | not wrapped; `COMPASS::PosteriorDiff()` runs on `cj_compass()$fits` and is not tested here |
 | 6 | Static ggplot2 plots | DONE | forest, response heatmap, contribution bars in `test-scores.R` |
 | 7 | Adoption API: `cj_gate()` (tail, quantile, manual), `cj_plot_gate()`, `cj_from_cells()` | DONE | `test-adoption.R`; tail gate misclassifies under 0.5% of simulated cells |

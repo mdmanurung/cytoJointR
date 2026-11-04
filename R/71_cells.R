@@ -20,6 +20,11 @@
 #'   `keep_events = TRUE`. [cj_fluorescence_scores()] needs it for the
 #'   cell-level bootstrap. It adds one numeric matrix of events by markers.
 #'
+#' With a per-batch gate (`cj_gate(by = )`), every event is first moved by its
+#' batch's cut minus the pooled cut. One threshold (the pooled cut) then applies
+#' to all samples, and `sx`, `ss` and the stored events are relative to each
+#' batch's own cut.
+#'
 #' @param cells Data frame, one row per event: `sample_id` and one fluorescence
 #'   column per marker. Events must already be in the parent population.
 #' @param markers Marker names mapped to columns, as in [cj_gate()]. `NULL`
@@ -63,6 +68,13 @@ cj_from_cells <- function(cells, markers = NULL, samples, gate = NULL, transform
   th <- gate$thresholds[names(mk)]
   samples <- recode_control(samples, control)
   X <- gate_matrix(cells, mk, gate$transform)
+  if (!is.null(gate$by)) {
+    # Per-batch gate: move each event by its batch cut minus the pooled cut, so one cut `th` applies to all.
+    b <- unname(gate$batch_of_sample[as.character(cells$sample_id)])
+    if (anyNA(b)) stop("cells has sample_id the gate has no batch for", call. = FALSE)
+    X <- X - sweep(gate$batch_thresholds[b, names(mk), drop = FALSE], 2L, th)
+    dimnames(X) <- list(NULL, names(mk))
+  }
   ev <- data.frame(sample_id = as.character(cells$sample_id), X, check.names = FALSE)
   m <- match(ev$sample_id, samples$sample_id)
   if (anyNA(m)) stop("cells has sample_id not in samples: ",

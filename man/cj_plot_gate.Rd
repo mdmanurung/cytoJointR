@@ -14,9 +14,11 @@ A ggplot2 object.
 }
 \description{
 One panel per marker: the density of the pooled control events on the
-transformed scale and a vertical line at the threshold. Check every panel
-before using the gate; a threshold inside the negative peak or far from the
-tail is a gating error.
+transformed scale and a vertical line at the threshold. Dashed lines are the
+per-batch cuts of a gate made with \code{by}. The panel title lists the method and
+any QC flag (\code{cut_in_broad_tail}, \code{high_control_positive},
+\code{batch_cut_spread}). Check every panel before using the gate; a threshold
+inside the negative peak or far from the tail is a gating error.
 }
 \examples{
 sim <- cj_simulate_cells(donors = 6, cells_per_sample = 400, seed = 1)

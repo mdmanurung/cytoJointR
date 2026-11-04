@@ -9,13 +9,16 @@ cj_gate(
   cells,
   markers,
   samples,
-  method = c("tail", "mindensity", "quantile", "manual"),
+  method = c("tail", "mindensity", "quantile", "manual", "auto"),
   thresholds = NULL,
   transform = NULL,
   cofactor = NULL,
   control = "control",
   probs = 0.999,
   tail_p = 0.001,
+  by = NULL,
+  min_batch_events = 1000L,
+  qc_thresholds = NULL,
   ...
 )
 
@@ -29,9 +32,9 @@ fluorescence column per marker.}
 vector (\code{c(IFNG = "BV786-A")}) or, if unnamed, the column names.}
 
 \item{samples}{Sample table with \code{sample_id} and \code{condition}, as in
-\code{\link[=cj_from_counts]{cj_from_counts()}}.}
+\code{\link[=cj_from_counts]{cj_from_counts()}}; plus the \code{by} column if used.}
 
-\item{method}{One of \code{"tail"}, \code{"mindensity"}, \code{"quantile"}, \code{"manual"}.}
+\item{method}{One of \code{"tail"}, \code{"mindensity"}, \code{"quantile"}, \code{"manual"}, \code{"auto"}.}
 
 \item{thresholds}{For \code{"manual"}: named numeric vector (one value per marker)
 on the transformed scale.}
@@ -39,7 +42,9 @@ on the transformed scale.}
 \item{transform}{Required. \code{"none"} (cells already transformed), \code{"asinh"}
 (with \code{cofactor}), or a one-argument function. There is no default.}
 
-\item{cofactor}{Positive number for \code{transform = "asinh"}: \code{asinh(x / cofactor)}.}
+\item{cofactor}{Positive number for \code{transform = "asinh"}: \code{asinh(x / cofactor)}.
+A vector named by marker gives one cofactor per marker. \code{"auto"} takes it
+from the width of the negative peak of the raw control events (\code{\link[=cj_cofactor]{cj_cofactor()}}).}
 
 \item{control}{Values of \code{samples$condition} that mean unstimulated. They
 are recoded to \code{"control"} in \code{\link[=cj_from_cells]{cj_from_cells()}}.}
@@ -49,6 +54,14 @@ are recoded to \code{"control"} in \code{\link[=cj_from_cells]{cj_from_cells()}}
 \item{tail_p}{One-sided tail probability for \code{"tail"}; 0.001 puts the cut
 3.09 spreads above the mode.}
 
+\item{by}{\code{NULL} (default, one pooled gate) or the name of a \code{samples} column
+(for example a staining batch or screen). Not used with \code{"manual"}.}
+
+\item{min_batch_events}{Minimum control events per batch (default 1000).}
+
+\item{qc_thresholds}{Named numeric vector overriding any of
+\code{max_control_pos} (0.01), \code{tail_density} (0.05) and \code{batch_spread} (1).}
+
 \item{...}{Passed to \code{openCyto::gate_mindensity()} for \code{"mindensity"}.}
 
 \item{x}{A \code{cj_gate}.}
@@ -57,12 +70,16 @@ are recoded to \code{"control"} in \code{\link[=cj_from_cells]{cj_from_cells()}}
 A \code{cj_gate} list: \code{thresholds} (named, transformed scale), \code{markers},
 \code{method}, \code{method_used} (per marker), \code{transform} (\code{fn} and \code{label}),
 \code{control}, \code{n_control} (events used), \code{control_values} (the pooled control
-events, transformed) and \code{notes}. Draw it with \code{\link[=cj_plot_gate]{cj_plot_gate()}}.
+events, transformed), \code{notes}, \code{qc} (one row per marker: flags and the
+numbers behind them), \code{auto} (tail ratio and choice per marker, for
+\code{"auto"}), and for \code{by}: \code{by}, \code{batch_thresholds} (batch by marker),
+\code{batch_of_sample}, \code{batch_n_control}, \code{control_batch}. Draw it with \code{\link[=cj_plot_gate]{cj_plot_gate()}}.
 }
 \description{
 Finds one positivity threshold per marker on all control (unstimulated)
-events pooled across donors, visits and samples. The threshold is on the
-transformed scale, and the transform must be stated.
+events pooled across donors, visits and samples, or one per batch with
+\code{by}. The threshold is on the transformed scale, and the transform must be
+stated.
 }
 \details{
 Methods:
@@ -71,7 +88,8 @@ Methods:
 negative population. Its spread is the root mean square of the events below
 the mode about the mode, and the threshold is \code{mode + qnorm(1 - tail_p) * spread}. This is the idea of the openCyto/flowDensity "tailgate" for
 cytokines. It runs in base R. (The \code{gate_tail()} function of older openCyto
-releases is not in current openCyto, so nothing is called there.)
+releases is not in current openCyto, so nothing is called there.) It assumes
+a symmetric negative peak; with a heavy upper tail the cut falls inside the tail.
 \item \code{"mindensity"}: \code{openCyto::gate_mindensity()} on the pooled control events,
 with \code{...} passed on. It needs openCyto and flowCore. Without openCyto the
 call warns and falls back to \code{"quantile"}; \code{method_used} records it. A
@@ -80,9 +98,57 @@ valley gate only works when the pooled control has a visible positive mode.
 0.999).
 \item \code{"manual"}: the named threshold vector in \code{thresholds}, on the transformed
 scale. It is also used when only \code{thresholds} is given.
+\item \code{"auto"}: per marker, \code{"tail"} or \code{"quantile"}, chosen from the shape of the
+pooled control distribution alone (see below). \code{method_used} and \verb{$auto}
+record the choice.
 }
 
-All control events are pooled; one gate does not follow donors or visits. The
+\strong{The automatic rule.} The tail rule extrapolates a Gaussian from the lower
+half of the negative peak. The statistic is the \emph{tail ratio}: the distance
+from the mode to the 99th percentile of the control events, divided by
+\code{qnorm(0.99)} times the one-sided spread. It is about 1 for a symmetric peak and
+grows when the upper tail is heavier than the lower half, whether from a skewed
+negative population or from weakly positive events in the control. A marker
+with a tail ratio above 1.5 gets the \code{probs} quantile (the tail extrapolation
+is contradicted by the data), unless more than 3\% of the control events lie
+above the tail cut. That much is more likely a positive population than a
+negative tail, the quantile would sit inside it, and the tail cut is kept, with
+the reason in \verb{$auto}. (3\% is where, in simulation, the quantile stops beating
+the tail cut.) Any other marker gets the tail cut. The 1.5 is
+above the 99th percentile of the Gaussian null at 1000 or more events (1.46 at
+1000, 1.33 at 2000, 1.13 at 1e5 events, simulated), so a clean marker keeps the
+tail cut. With fewer than 1000 control events for a marker the tail cut is
+kept, with the reason in \verb{$auto}. The constants were fixed from this null and
+from simulated mixtures with clean and heavy tails, before any comparison with
+expert gates; the simulator is \code{\link[=cj_simulate_gate_cells]{cj_simulate_gate_cells()}}. The rule reads control events only. It does not handle a
+control with a distinct positive mode (use \code{"mindensity"} there; the
+\code{high_control_positive} flag warns).
+
+\strong{Batches.} With \code{by}, the cut of every batch is found on that batch's
+control events, with the same method, and applied to that batch's samples.
+\code{thresholds} stays the pooled cut, the reference level; \code{\link[=cj_from_cells]{cj_from_cells()}}
+shifts each event by its batch's cut minus the pooled cut, so downstream
+code still compares one value with one threshold. A batch with fewer than
+\code{min_batch_events} control events, or none, takes the pooled cut and the call
+warns. For \code{"auto"}, the shape is judged on control events centred on each
+batch's mode, so batch offsets do not look like a heavy tail.
+
+\strong{QC flags} (\verb{$qc}, shown by \code{print()} and \code{\link[=cj_plot_gate]{cj_plot_gate()}}), from control
+events only. Limits are in \code{qc_thresholds}.
+\itemize{
+\item \code{cut_in_broad_tail}: the control density at the cut is above 5\% of the peak
+density (a clean cut 3.09 spreads above the mode sits near 1\%).
+\item \code{high_control_positive}: more than 1\% of the control events lie above the
+tail-rule cut. A clean control has 0.1\% by construction. Unstimulated
+cytokine-positive events, or a heavy negative tail, exceed this. (The
+percentage above the cut actually used is also in \verb{$qc}; for a quantile cut
+it is fixed near \code{100 * (1 - probs)}.)
+\item \code{batch_cut_spread}: with \code{by}, the range of the batch cuts is more than one
+negative-peak spread. The batches then disagree about where the negative
+population ends, so a pooled cut would be wrong for some of them.
+}
+
+All control events are pooled within a batch (or entirely, without \code{by}). The
 gate depends on the control events only, never on stimulated ones.
 Events are assumed to be already inside the parent population (for example
 live CD4 T cells) and quality controlled.
@@ -93,4 +159,9 @@ samples <- unique(sim$cells[c("sample_id", "donor_id", "condition")])
 g <- cj_gate(sim$cells, c("IFNG", "TNF", "IL2"), samples, method = "quantile",
              transform = "none", control = "unstim")
 g
+
+# Heavy-tailed marker: "auto" switches that marker to the control quantile.
+s <- cj_simulate_gate_cells(c("clean", "skewed"), c("A", "B"), seed = 1)
+cj_gate(s$cells, c("A", "B"), s$samples, method = "auto", transform = "none",
+        control = "unstim")
 }

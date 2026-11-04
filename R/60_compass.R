@@ -237,9 +237,12 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #'   max mean gamma of the non-paired rows onto the paired scale with a label-free
 #'   empirical null from the same run. See *Calibrated calls*.
 #' @param max_pseudo Most paired donors per COMPASS run that are pseudo-removed for the
-#'   calibration (default 40). Each 5 donors cost one extra COMPASS fit per run, so the
+#'   calibration in one partition (default 20). Each 5 donors cost one extra COMPASS fit per run, so the
 #'   calibrated call costs about `1 + max_pseudo / 5` fits per run with non-paired rows. A
 #'   map needs at least 15 pseudo donors, so a cap below 15 always uses the fallback cut.
+#' @param donor_switch With `"donor"` and calibration, switch a run whose borrowed controls cannot rank
+#'   donors (pseudo AUC below 0.7, with at least 5 pseudo donors with a paired call) to the same-visit
+#'   `"population"` control. See *Calibrated calls*.
 #' @param pseudo_reps Number of random partitions of the paired donors into pseudo-removal folds
 #'   (default 1). The pseudo points of all repeats are pooled for the map.
 #' @param calibrate_seed Seed for choosing the pseudo-removed donors. The caller's RNG
@@ -267,7 +270,7 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' }
 cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FALSE,
                        missing_control = c("drop", "donor", "population"),
-                       missing_control_calibrate = FALSE, max_pseudo = 40L, calibrate_seed = 1L, pseudo_reps = 1L, ...) {
+                       missing_control_calibrate = FALSE, max_pseudo = 20L, calibrate_seed = 1L, pseudo_reps = 3L, donor_switch = TRUE, ...) {
   compass_require()
   # SimpleCOMPASS() calls set.seed(): give the caller's RNG state back on exit.
   had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
@@ -369,9 +372,29 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
                           "that did (see $calibration$n_failed)")
     cal <- compass_calibrate_scores(scores, gs, pseudo, cal_method)
     scores <- cal$scores
-    calibration <- list(table = cal$info, pseudo = pseudo, n_failed = n_failed)
+    if (!is.null(cal$info)) cal$info$switched <- FALSE
+    calibration <- list(table = cal$info, pseudo = pseudo, n_failed = n_failed, switched = NULL)
+    # "donor" groups whose borrowed control cannot rank donors take the same-visit population control.
+    if (donor_switch && missing_control == "donor" && !is.null(cal$info)) {
+      bad <- cal$info$group[cal$info$control_class == "donor_visit" & !is.na(cal$info$pseudo_auc) &
+                              cal$info$pseudo_auc < COMPASS_CAL_SWITCH_AUC &
+                              cal$info$n_pseudo_above >= COMPASS_CAL_SWITCH_POS]
+      if (length(bad)) {
+        sw <- compass_switch_groups(bad, scores, gs, x, ord, nm, null_col, category_filter, verbose,
+                                    cal_method, max_pseudo, calibrate_seed, pseudo_reps, ...)
+        scores <- sw$scores
+        calibration$switched <- sw$table
+        calibration$n_failed <- calibration$n_failed + sw$n_failed
+        cal$info$switched <- cal$info$group %in% sw$table$group & cal$info$control_class == "donor_visit"
+        calibration$table <- cal$info
+        message(sum(scores$calibration %in% "switched"), " borrowed-control row(s) in ", nrow(sw$table),
+                " group(s) switched to the same-visit population control: the borrowed control did not rank ",
+                "donors like the paired control (pseudo AUC < ", COMPASS_CAL_SWITCH_AUC, ")")
+      }
+    }
     n_fb <- sum(scores$calibration %in% "fallback")
-    low <- cal$info$used_map & !is.na(cal$info$pseudo_auc) & cal$info$pseudo_auc < COMPASS_CAL_MIN_AUC
+    low <- if (is.null(cal$info)) FALSE else
+      cal$info$used_map & !cal$info$switched & !is.na(cal$info$pseudo_auc) & cal$info$pseudo_auc < COMPASS_CAL_MIN_AUC
     if (n_alt) message("missing_control_calibrate: ", sum(scores$calibration %in% cal_method), " row(s) mapped onto the ",
             "paired scale (", cal_method, "), ", n_fb, " on the fallback cut (too few paired donors); ",
             "use compass_call, not max gamma > 0.5. Calibrated in simulation only (40 donors, 4 markers): ",

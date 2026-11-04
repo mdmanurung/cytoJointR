@@ -103,7 +103,7 @@ test_that("missing_control_calibrate adds columns, leaves the default alone, and
   expect_false(any(c("compass_call", "compass_gamma_cal") %in% names(base$scores)))
   expect_null(base$calibration)
   cc <- suppressWarnings(suppressMessages(cj_compass(
-    x, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 5,
+    x, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 5, pseudo_reps = 1,
     iterations = 200, replications = 2, seed = 3)))
   # Raw gamma is unchanged by calibration; the paired rows keep it.
   expect_equal(cc$scores$compass_max_gamma, base$scores$compass_max_gamma)
@@ -162,7 +162,7 @@ test_that("two groups get their own maps and the AUC is flagged only where the m
   few <- data.frame(group = "g3", cls = "population", gamma_pseudo = pop[1:6], gamma_paired = as.numeric(pop[1:6] < 0.7))
   sc <- cal_scores(c(0.9, 0.9, 0.9, 0.9), c("population", "population", "population", "paired"))
   gid <- c("g1", "g2", "g3", "g1")
-  r <- cytoJointR:::compass_calibrate_scores(sc, gid, rbind(good, bad, few), "isotonic")
+  r <- cytoJointR:::compass_calibrate_scores(sc, gid, rbind(good, bad, few), "isotonic", min_excess = NULL)
   expect_equal(r$scores$calibration, c("isotonic", "isotonic", "fallback", "paired"))
   expect_true(r$scores$compass_call[1])
   i <- r$info[match(c("g1", "g2", "g3"), r$info$group), ]
@@ -245,8 +245,10 @@ sim_cal_data <- function(n_donor = 30, n_miss = 6, seed = 1) {
 test_that("the isotonic path runs end to end with 24 paired donors and keeps rows aligned", {
   skip_if_not_installed("COMPASS")
   d <- sim_cal_data()
+  # The simulated background has no excess of pseudo-missing calls, so switch the no-excess gate off here.
+  testthat::local_mocked_bindings(COMPASS_CAL_MIN_EXCESS = -1, .package = "cytoJointR")
   cc <- suppressWarnings(suppressMessages(cj_compass(
-    d$x, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 20,
+    d$x, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 20, pseudo_reps = 1,
     iterations = 400, replications = 2, seed = 3)))
   expect_equal(nrow(cc$scores), 30)
   expect_equal(sum(cc$scores$control_source != "paired"), 6)
@@ -274,4 +276,86 @@ test_that("a user seed does not hijack the calibration arguments", {
     iterations = 100, replications = 2, seed = 3)))
   expect_equal(sort(unique(cc$calibration$pseudo$rep)), 1:2)
   expect_equal(nrow(cc$calibration$pseudo), 10)
+})
+
+test_that("a run with no excess of pseudo-missing calls keeps its raw gamma", {
+  set.seed(6)
+  pop <- runif(40)
+  ps <- data.frame(group = "g", cls = "population", donor_id = 1:40, gamma_pseudo = pop,
+                   gamma_paired = pop)    # the pseudo control calls exactly what the paired one calls
+  sc <- cal_scores(c(0.9, 0.3), c("population", "population"))
+  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), ps, "isotonic")
+  expect_equal(r$scores$calibration, c("raw", "raw"))
+  expect_equal(r$scores$compass_gamma_cal, c(0.9, 0.3))
+  expect_lte(r$info$excess, 0.02)
+  ps$gamma_pseudo <- pmin(1, ps$gamma_pseudo + 0.3)   # pseudo control now calls too many donors
+  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), ps, "isotonic")
+  expect_equal(unique(r$scores$calibration), "isotonic")
+})
+
+test_that("repeated partitions give each paired donor one point per repeat and count donors once", {
+  set.seed(7)
+  pop <- runif(10)
+  one <- data.frame(group = "g", cls = "population", donor_id = 1:10, gamma_pseudo = pop,
+                    gamma_paired = as.numeric(pop > 0.5))
+  rep3 <- rbind(one, one, one)      # 30 points but only 10 donors: below the 15-donor minimum
+  sc <- cal_scores(0.9, "population")
+  r <- cytoJointR:::compass_calibrate_scores(sc, "g", rep3, "isotonic")
+  expect_equal(r$info$n_pseudo, 10)
+  expect_equal(r$scores$calibration, "fallback")
+})
+
+# 36 donors, two visits, background x2 at v2 (control and stimulated); every responder gets 3% A+B cells.
+# Eight donors lack the v2 control, so "donor" borrows their v1 control, which understates the v2 background.
+sim_shift_data <- function(n_donor = 36, n_miss = 8, fold = 2, seed = 2) {
+  set.seed(seed)
+  markers <- c("A", "B", "C")
+  bits <- cj_bits(markers)
+  pat <- apply(bits, 1, \(b) paste(markers[b == 1L], collapse = "+"))
+  p0 <- apply(bits, 1, \(b) prod(ifelse(b == 1L, 0.03, 0.97)))
+  q <- as.numeric(pat == "A+B")
+  ids <- sprintf("D%02d", seq_len(n_donor))
+  resp <- ids %in% ids[seq(2, n_donor, by = 2)]
+  grid <- expand.grid(donor_id = ids, visit = c("v1", "v2"), condition = c("control", "CMV"), stringsAsFactors = FALSE)
+  grid$sample_id <- paste(grid$donor_id, grid$visit, grid$condition, sep = "_")
+  grid$N <- 60000L
+  grid$counts <- lapply(seq_len(nrow(grid)), \(i) {
+    b <- p0 * ifelse(grid$visit[i] == "v2" & rowSums(bits) > 0, fold, 1)
+    b <- b / sum(b)
+    w <- if (grid$condition[i] == "CMV" && grid$donor_id[i] %in% ids[resp]) 0.03 else 0
+    rmultinom(1, grid$N[i], (1 - w) * b + w * q)[, 1]
+  })
+  grid <- grid[!grid$sample_id %in% paste0(ids[seq_len(n_miss)], "_v2_control"), ]
+  counts <- do.call(rbind, grid$counts)
+  dimnames(counts) <- list(grid$sample_id, cytoJointR:::pattern_labels(bits))
+  storage.mode(counts) <- "integer"
+  meta <- data.frame(sample_id = grid$sample_id, donor_id = grid$donor_id, visit = factor(grid$visit),
+                     parent_population = "CD4", condition = grid$condition, N = grid$N)
+  cytoJointR:::new_cj_data(counts, meta, cytoJointR:::derive_contrasts(meta), bits)
+}
+
+test_that("a donor group with a low pseudo AUC is switched to the same-visit population control", {
+  skip_if_not_installed("COMPASS")
+  x <- sim_shift_data()
+  cc <- suppressWarnings(suppressMessages(cj_compass(
+    x, missing_control = "donor", missing_control_calibrate = TRUE, max_pseudo = 20, pseudo_reps = 1,
+    iterations = 300, replications = 2, seed = 3)))
+  sw <- cc$scores$calibration == "switched"
+  expect_true(any(sw))
+  # Only the borrowed rows of the shifted visit switch; paired rows and the other visit keep their method.
+  expect_true(all(cc$scores$visit[sw] == "v2"))
+  expect_true(all(startsWith(cc$scores$control_source[sw], "donor_visit")))
+  expect_false(anyNA(cc$scores$compass_max_gamma_switch[sw]))
+  expect_true(all(is.na(cc$scores$compass_max_gamma_switch[!sw])))
+  expect_equal(cc$calibration$switched$group, "CMV | v2 | CD4")
+  expect_true(cc$calibration$table$switched[cc$calibration$table$group == "CMV | v2 | CD4"])
+  expect_false(any(cc$scores$calibration[cc$scores$visit == "v1"] == "switched"))
+  # The switched control has the same-visit background: a switched non-responder is rarely called.
+  truth <- as.integer(sub("D", "", cc$scores$donor_id)) %% 2 == 0
+  expect_lt(mean(cc$scores$compass_call[sw & !truth]), 0.3)
+  # Switching off keeps the borrowed calls.
+  off <- suppressWarnings(suppressMessages(cj_compass(
+    x, missing_control = "donor", missing_control_calibrate = TRUE, donor_switch = FALSE, max_pseudo = 20,
+    pseudo_reps = 1, iterations = 300, replications = 2, seed = 3)))
+  expect_false("switched" %in% off$scores$calibration)
 })

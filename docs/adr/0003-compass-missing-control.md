@@ -138,3 +138,20 @@ for runs with too few pseudo donors, instead of the 0.85 cut, meets the FPR bar 
 cells (largest gap +0.118, `"donor"` moderate) against 12 of 12 (+0.049) with the cut.
 The cut costs power: TPR bar 10 of 12 against 12 of 12. The fallback stays because it earns
 its place on the FPR bar; its constant remains simulation-derived.
+
+Clean held-out test (seeds 21 to 30, scored once, package 1345d2d, same grid and 40 donors,
+`runs/2026-11-08_u2-compass-calibrate-heldout-clean`). The earlier held-out seeds 11 to 20
+were used twice and informed the tighten-only rule, so they are no longer a clean test; this is.
+- FPR bar (non-paired <= paired + 0.05): 11 of 12 cells. The miss is `"population"`,
+  moderate effect, 50% missing: 0.158 against 0.071 paired (+0.086). Seeds 26 and 28 keep
+  almost all raw false calls there, with only about 20 paired donors for the map. Other cells
+  have gaps of -0.017 to +0.017. The raw rule met the bar in 6 of 12 (largest gap +0.285).
+- TPR bar (loss <= 0.05): 9 of 12. The three `"donor"` rare-weak cells fail (-0.07, -0.10,
+  -0.24), through the fallback cut, as before.
+- Non-paired AUC fell at most 0.004.
+- Visit effect with `"donor"`: unchanged. The later visit keeps FPR 0.52 to 0.91 (moderate)
+  and 0.55 to 0.72 (rare, weak). `control_shift_check` was `"untestable"` for every borrowed
+  row, and the pseudo-AUC warning fired in 100% of those later-visit runs against 0% of moderate
+  runs without a shift (14 to 23% at the rare, weak effect without a shift).
+So the claim is: calibration brings non-paired FPR to within 0.05 of paired in most cells, not
+all, at 40 donors with about 20 or more paired donors per run.

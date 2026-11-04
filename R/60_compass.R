@@ -360,7 +360,7 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
     if (n_alt) message("missing_control_calibrate: ", sum(scores$calibration %in% cal_method), " row(s) mapped onto the ",
             "paired scale (", cal_method, "), ", n_fb, " on the fallback cut (too few paired donors); ",
             "use compass_call, not max gamma > 0.5. Calibrated in simulation only (40 donors, 4 markers): ",
-            "non-paired FPR then stays within 0.04 of the paired FPR, but \"donor\" at a visit with a ",
+            "non-paired FPR was within 0.05 of the paired FPR in 11 of 12 cells on a clean held-out test (largest gap 0.09), but \"donor\" at a visit with a ",
             "shifted background is not repaired; see docs/adr/0003-compass-missing-control.md.")
     if (any(low))
       warning("In ", sum(low), " group(s) a pseudo-missing control does not rank donors like the paired ",

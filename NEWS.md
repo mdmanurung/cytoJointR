@@ -7,8 +7,9 @@
   `compass_max_gamma` (always), and with calibration `compass_gamma_cal`, `compass_call`
   and `calibration`; the result gains `$calibration`. A run with fewer than 15 paired
   donors uses a fallback cut (gamma 0.85, from simulation only). In simulation the
-  non-paired FPR stays within 0.04 of the paired FPR; `"donor"` at a visit with a shifted
-  background is not repaired and warns. Cost is 5 to 9 times the plain call.
+  non-paired FPR was within 0.05 of the paired FPR in 11 of 12 cells on a clean held-out
+  test (largest gap 0.09, `"population"` at 50% missing); `"donor"` at a visit with a
+  shifted background is not repaired and warns. Cost is 5 to 9 times the plain call.
   `docs/adr/0003-compass-missing-control.md` has the numbers.
 
 * `cj_compass(missing_control = c("drop", "donor", "population"))` runs COMPASS on

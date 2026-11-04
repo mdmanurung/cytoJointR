@@ -265,3 +265,13 @@ test_that("the isotonic path runs end to end with 24 paired donors and keeps row
   expect_true(all(cc$scores$compass_gamma_cal[np] <= cc$scores$compass_max_gamma[np]))
   expect_equal(cc$scores$compass_call, cc$scores$compass_gamma_cal > 0.5)
 })
+
+test_that("a user seed does not hijack the calibration arguments", {
+  skip_if_not_installed("COMPASS")
+  x <- cal_data()
+  cc <- suppressWarnings(suppressMessages(cj_compass(
+    x, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 5, pseudo_reps = 2,
+    iterations = 100, replications = 2, seed = 3)))
+  expect_equal(sort(unique(cc$calibration$pseudo$rep)), 1:2)
+  expect_equal(nrow(cc$calibration$pseudo), 10)
+})

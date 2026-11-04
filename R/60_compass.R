@@ -359,7 +359,8 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
   calibration <- NULL
   if (!is.na(cal_method) && !is.null(scores)) {
     pseudo <- if (n_alt) compass_pseudo_fits(x, ct, fits, gid, ord, nm, null_col, category_filter, verbose,
-                                  missing_control, max_pseudo, calibrate_seed, pseudo_reps, ...)
+                                  missing_control = missing_control, max_pseudo = max_pseudo,
+                                  calibrate_seed = calibrate_seed, reps = pseudo_reps, ...)
     gs <- paste(scores$stimulation, scores$visit, scores$parent_population, sep = " | ")
     if (is.null(pseudo)) pseudo <- data.frame(group = character(), donor_id = character(), cls = character(),
                                               fold = integer(), rep = integer(), gamma_pseudo = numeric(), gamma_paired = numeric())

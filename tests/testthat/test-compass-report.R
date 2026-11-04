@@ -30,7 +30,9 @@ test_that("C0 report joins COMPASS and magnitudes by contrast and needs no Stan"
   expect_true(all(rep$rms_lower <= rep$rms & rep$rms <= rep$rms_upper, na.rm = TRUE))
   expect_equal(unique(rep$magnitude_model), "c0")
   # The default is C0-EB.
-  expect_equal(unique(cj_compass_report(x, compass = fake_compass(x, rep(0.9, n)), n_draws = 300, seed = 1)$magnitude_model), "c0eb")
+  # The default is C0-EB, which warns on this small data set (6 donor-visit blocks, fewer than 8).
+  expect_warning(r0 <- cj_compass_report(x, compass = fake_compass(x, rep(0.9, n)), n_draws = 300, seed = 1), "poorly determined")
+  expect_equal(unique(r0$magnitude_model), "c0eb")
   # Same draws, same numbers as the score layer.
   sc <- suppressMessages(cj_scores(cj_fit_dirichlet(x, n_draws = 500, seed = 1), REPORT_EPSILON,
                                    level = 0.9, ccs_gate = NULL))
@@ -49,7 +51,8 @@ test_that("concordance flags both kinds of disagreement and a missing control", 
   x$counts[x$contrasts$stim_sample_id[1:3], ] <- x$counts[x$contrasts$stim_sample_id[1:3], ] +
     rep(c(0L, 400L, 400L, 400L), each = 3)
   resp <- c(0.9, 0.2, 0.9, 0.9, 0.2, 0.2)[seq_len(n)]
-  rep <- cj_compass_report(x, compass = fake_compass(x, resp), n_draws = 500, seed = 1)
+  # The default C0-EB warns on 6 donor-visit blocks; the warning is expected here.
+  expect_warning(rep <- cj_compass_report(x, compass = fake_compass(x, resp), n_draws = 500, seed = 1), "poorly determined")
   mag <- rep$rms_lower > 1e-4 # the default floor is the RMS epsilon
   expect_equal(rep$magnitude_positive, mag)
   expect_true(all(mag[1:3]))
@@ -62,11 +65,11 @@ test_that("concordance flags both kinds of disagreement and a missing control", 
   expect_equal(rep$discordant, c(FALSE, TRUE, FALSE, TRUE, FALSE, FALSE))
   expect_equal(rep$compass_call, resp > 0.5)
   # response_threshold moves the call; magnitude_floor moves the magnitude test.
-  r2 <- cj_compass_report(x, compass = fake_compass(x, resp), n_draws = 500, seed = 1,
-                          response_threshold = 0.95)
+  expect_warning(r2 <- cj_compass_report(x, compass = fake_compass(x, resp), n_draws = 500, seed = 1,
+                                         response_threshold = 0.95), "poorly determined")
   expect_true(all(!r2$compass_call))
-  r3 <- cj_compass_report(x, compass = fake_compass(x, resp), n_draws = 500, seed = 1,
-                          magnitude_floor = 1)
+  expect_warning(r3 <- cj_compass_report(x, compass = fake_compass(x, resp), n_draws = 500, seed = 1,
+                                         magnitude_floor = 1), "poorly determined")
   expect_true(all(!r3$magnitude_positive))
 })
 
@@ -79,7 +82,7 @@ test_that("a contrast without control is not assessed, never concordant by defau
   extra <- comp[1, ]
   extra$contrast_id <- x$contrasts$contrast_id[2]
   extra$donor_id <- x$contrasts$donor_id[2]
-  rep <- cj_compass_report(x, compass = rbind(comp, extra), n_draws = 300, seed = 1)
+  expect_warning(rep <- cj_compass_report(x, compass = rbind(comp, extra), n_draws = 300, seed = 1), "poorly determined")
   i <- match(x$contrasts$contrast_id[2], rep$contrast_id)
   expect_true(is.na(rep$rms[i]))
   expect_equal(as.character(rep$concordance[i]), "not_assessed")
@@ -94,9 +97,10 @@ test_that("cell input adds NICR with bootstrap intervals", {
   x <- cj_from_cells(sim$cells, c("IFNG", "TNF", "IL2"), samples, transform = "none",
                      control = "unstim", method = "quantile")
   n <- sum(!is.na(x$contrasts$control_sample_id))
-  rep <- cj_compass_report(sim$cells, c("IFNG", "TNF", "IL2"), samples, transform = "none",
-                           control = "unstim", gate_args = list(method = "quantile"),
-                           compass = fake_compass(x, rep(0.9, n)), n_boot = 20, n_draws = 300, seed = 1)
+  expect_warning(rep <- cj_compass_report(sim$cells, c("IFNG", "TNF", "IL2"), samples, transform = "none",
+                                          control = "unstim", gate_args = list(method = "quantile"),
+                                          compass = fake_compass(x, rep(0.9, n)), n_boot = 20, n_draws = 300,
+                                          seed = 1), "poorly determined")
   mk <- attr(rep, "markers")
   expect_true(all(c("nicr", "nicr_lo", "nicr_hi", "poly_nicr", "poly_nicr_lo", "poly_nicr_hi") %in% names(mk)))
   expect_true(all(mk$nicr_lo <= mk$nicr_hi, na.rm = TRUE))
@@ -119,8 +123,8 @@ test_that("m1dm option uses the structured fit", {
 test_that("the forest plot maps magnitude to position and COMPASS response to colour", {
   x <- report_data()
   n <- sum(!is.na(x$contrasts$control_sample_id))
-  rep <- cj_compass_report(x, compass = fake_compass(x, seq(0.1, 0.9, length.out = n)),
-                           n_draws = 300, seed = 1)
+  expect_warning(rep <- cj_compass_report(x, compass = fake_compass(x, seq(0.1, 0.9, length.out = n)),
+                                          n_draws = 300, seed = 1), "poorly determined")
   p <- cj_plot_compass_report(rep)
   expect_s3_class(p, "ggplot")
   expect_equal(nrow(p$data), n)
@@ -135,9 +139,10 @@ test_that("a real COMPASS run feeds the report", {
   samples <- unique(sim$cells[c("sample_id", "donor_id", "condition")])
   samples$visit <- factor("v1")
   samples$parent_population <- "CD4"
-  rep <- cj_compass_report(sim$cells, c("IFNG", "TNF", "IL2"), samples, transform = "none",
-                           control = "unstim", gate_args = list(method = "quantile"),
-                           compass_args = list(iterations = 200, replications = 2), n_draws = 300)
+  expect_warning(rep <- cj_compass_report(sim$cells, c("IFNG", "TNF", "IL2"), samples, transform = "none",
+                                          control = "unstim", gate_args = list(method = "quantile"),
+                                          compass_args = list(iterations = 200, replications = 2),
+                                          n_draws = 300), "poorly determined")
   expect_false(all(is.na(rep$compass_FS)))
   expect_false(all(is.na(rep$rms)))
 })

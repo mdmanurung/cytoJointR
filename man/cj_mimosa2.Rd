@@ -2,7 +2,7 @@
 % Please edit documentation in R/63_mimosa2.R
 \name{cj_mimosa2}
 \alias{cj_mimosa2}
-\title{Baseline-adjusted positivity calls with MIMOSA2}
+\title{Baseline-adjusted positivity calls with a native MIMOSA2 model}
 \usage{
 cj_mimosa2(
   x,
@@ -10,7 +10,8 @@ cj_mimosa2(
   baseline_visit = NULL,
   fdr = 0.01,
   tol = 1e-05,
-  maxit = 100L
+  maxit = 100L,
+  missing_control = c("drop", "marginal")
 )
 }
 \arguments{
@@ -21,57 +22,78 @@ cj_mimosa2(
 \item{baseline_visit}{The baseline visit. Defaults to the first level of
 \code{samples$visit}. Every other visit is a follow-up and gets its own fits.}
 
-\item{fdr}{Threshold for \code{mimosa2_response}, on \code{mimosa2_fdr}. 0.01 is
-MIMOSA2's \code{getResponse()} default.}
+\item{fdr}{Threshold for \code{mimosa2_response}, on \code{mimosa2_fdr}. 0.01 is the
+usual MIMOSA2 default.}
 
-\item{tol, maxit}{Passed to \code{MIMOSA2::MIMOSA2()}. \code{tol = 1e-5} is the value of
-MIMOSA2's README; its own default is \code{1e-8}.}
+\item{tol, maxit}{EM stopping rule: stop when the log posterior changes by
+less than \code{tol} (relative), or after \code{maxit} iterations.}
+
+\item{missing_control}{\code{"drop"} (default) or \code{"marginal"} (experimental); see
+\emph{Details}.}
 }
 \value{
-A \code{cj_mimosa2} list with \code{fits} (named list of \code{MIMOSA2model}),
-\code{scores} (one row per donor and fit: the four positive counts \code{ns1}, \code{nu1},
-\code{ns0}, \code{nu0}, the four totals \code{Ns1}, \code{Nu1}, \code{Ns0}, \code{Nu0}, \code{delta},
-\code{mimosa2_p_response}, \code{mimosa2_fdr}, \code{mimosa2_response}), \code{groups} (one
-row per fit with its status) and \code{excluded} (donors left out, with the
-reason).
+A \code{cj_mimosa2} list with \code{fits} (named list of \code{cj_mimosa2_fit}:
+\code{z}, \code{pi}, \code{mu}, \code{log_precision}, \code{p_response}, \code{q}, \code{converged},
+\code{iterations}, \code{objective}), \code{scores} (one row per donor and fit: the four
+positive counts \code{ns1}, \code{nu1}, \code{ns0}, \code{nu0}, the four totals \code{Ns1}, \code{Nu1},
+\code{Ns0}, \code{Nu0}, \code{delta}, \code{mimosa2_p_response}, \code{mimosa2_fdr},
+\code{mimosa2_response}, \code{control_source}), \code{groups} (one row per fit with its
+status) and \code{excluded} (donors left out, with the reason).
 }
 \description{
-Runs one \code{MIMOSA2::MIMOSA2()} per stimulation, parent population and
-follow-up visit. Each donor enters with four samples: stimulated and control
-at the baseline visit, and stimulated and control at the follow-up visit.
-MIMOSA2 then asks whether the stimulated-minus-control proportion rose from
-baseline to follow-up. The native \code{MIMOSA2model} objects are returned in
-\code{fits}, so \code{MIMOSA2::getZ()}, \code{MIMOSA2::getFDR()} and \code{MIMOSA2::Boxplot()}
-work on them.
+A native implementation of the MIMOSA2 design (ADR 0004,
+\code{docs/adr/0004-mimosa2-native.md}), written from that specification and
+sharing no code with the upstream package. It extends the mixture of
+beta-binomials of Finak et al. (2014, MIMOSA). One fit covers one
+stimulation, parent population and follow-up visit. Each donor enters with
+four samples: stimulated and control at the baseline visit, and stimulated
+and control at the follow-up visit. The model asks whether the
+stimulated-minus-control proportion rose from baseline to follow-up.
 }
 \details{
-\strong{One subset per fit.} MIMOSA2 models one count per sample, not the
+\strong{One subset per fit.} The model uses one count per sample, not the
 Boolean patterns COMPASS uses. \code{positive = "any"} counts the cells positive
 for at least one marker (all cells minus the all-negative pattern).
 \code{positive = "<marker>"} counts the cells positive for that marker, whatever
 the other markers do.
 
-\strong{All four samples are needed.} A donor that lacks any of them for a fit is
-left out and listed in \code{excluded} with the reason. MIMOSA2 does not relax the
-paired-control requirement; \code{cj_compass(missing_control = )} is the option
-for stimulated samples without a control.
-
-\strong{What a call means.} \code{mimosa2_p_response} is the posterior mass of
-MIMOSA2's four responder components. Those components are one-sided: a donor
-whose \code{delta} (\code{ps1 - pu1 - ps0 + pu0}, follow-up minus baseline of the
-stimulated-minus-control proportion) is negative cannot be a responder.
-\code{mimosa2_fdr} is MIMOSA2's q-value by the method of Newton et al. (2004). Its
+\strong{The model.} Four proportion levels, each a beta distribution with its own
+mean and precision, ordered by construction. Eleven components say which of a
+donor's four samples share a level; components 1 to 4 are responders. EM
+finds the posterior mode under the priors of the ADR. \code{mimosa2_p_response} is
+the posterior mass of the four responder components. Those components are
+one-sided: a donor whose \code{delta} (\code{ps1 - pu1 - ps0 + pu0}, follow-up minus
+baseline of the stimulated-minus-control proportion) is negative cannot be a
+responder. \code{mimosa2_fdr} is the q-value of Newton et al. (2004). Its
 multiple-testing family is the donors of one fit, so q-values are not
 comparable across fits. \code{mimosa2_response} is \code{mimosa2_fdr < fdr}.
 
-\strong{Fit status.} MIMOSA2 is an EM fit of an 11-component mixture with 8
-parameters, so it needs many donors per fit (its own example uses 100). It
-stops silently when its optimiser fails. \code{groups$status} is \code{"fitted"},
-\code{"failed: <message>"}, or \code{"no estimate"} when the responder probabilities
-are not finite.
+\strong{Deviations from upstream MIMOSA2} (the ADR gives the reasons): mixing
+weights enter as \code{log(pi)}; every level has its own precision; level means
+are ordered by a monotone parametrisation, not by sorting; the one-sided rule
+is a hard zero; the optimiser is \code{stats::optim(method = "BFGS")}; the
+initialisation is data-driven; the stopping rule is a relative change of the
+log posterior below \code{tol}.
+
+\strong{Missing samples.} With \code{missing_control = "drop"} (default) a donor needs
+all four samples for a fit. Otherwise it is left out and listed in \code{excluded}
+with the reason. With \code{"marginal"}, a donor with exactly one missing control
+enters: that sample's count and total are set to 0, so its term drops out of
+the likelihood, and the initialisation and the one-sided rule use the donor's
+other control in its place. This assumes a background that is stable across
+visits, and rests on whether the stimulated sample sits at the high or the
+low level, an absolute rather than a within-donor contrast. \strong{It is
+experimental and not yet calibrated.} Donors missing a stimulated sample, or
+both controls, stay excluded. \code{scores$control_source} is \code{"paired"},
+\code{"marginal: u1 missing"} or \code{"marginal: u0 missing"}.
+
+\strong{Fit status.} The model has 8 level parameters and 11 components, so it
+needs many donors per fit (dozens at least). \code{groups$status} is \code{"fitted"},
+\code{"not converged"} (EM hit \code{maxit}; the estimates are still returned),
+\code{"failed: <message>"} (an error was caught), or \code{"no estimate"} when the
+responder probabilities are not finite.
 }
 \examples{
-\dontshow{if (requireNamespace("MIMOSA2", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 \donttest{
 d <- cj_example_draws(n_donor = 30, markers = c("IFNG", "TNF"), visits = c("pre", "post"),
                       stimulations = "CMV", n_draw = 5)
@@ -83,9 +105,13 @@ x <- cytoJointR:::new_cj_data(counts, d$samples, d$contrasts, d$bits)
 mm <- cj_mimosa2(x)
 mm$scores
 }
-\dontshow{\}) # examplesIf}
 }
 \references{
 Finak G et al. (2014). Mixture models for single-cell assays with
 applications to vaccine studies. \emph{Biostatistics} 15(1):87-101.
+
+Newton MA et al. (2004). Detecting differential gene expression with a
+semiparametric hierarchical mixture method. \emph{Biostatistics} 5(2):155-176.
+
+Design and deviations: \code{docs/adr/0004-mimosa2-native.md} (ADR 0004).
 }

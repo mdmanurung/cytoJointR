@@ -25,14 +25,11 @@ Suggests:
     flowCore,
     flowWorkspace,
     knitr,
-    MIMOSA2,
     openCyto,
     polyICSFlow,
     rmarkdown,
     testthat (>= 3.0.0),
     withr
-Remotes:
-    github::RGLab/MIMOSA2
 Additional_repositories: https://stan-dev.r-universe.dev
 VignetteBuilder: knitr
 Config/testthat/edition: 3

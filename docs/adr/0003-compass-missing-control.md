@@ -1,6 +1,6 @@
 # 0003. COMPASS without a control sample runs in the adapter
 
-Date: 2026-11-03. Status: accepted.
+Date: 2026-11-03, calibration added 2026-11-08. Status: accepted.
 
 ## Context
 
@@ -62,3 +62,68 @@ last two.
 
 Rejected: forking COMPASS; imputing a control from the population mean counts
 (it invents data and gives the donor control a fake precision).
+
+## Calibration of non-paired calls (2026-11-08)
+
+`cj_compass(missing_control_calibrate = TRUE)` addresses the liberal call: the
+`gamma > 0.5` rule gave FPR 0.19 to 0.39 (`"population"`) among non-paired rows against
+0.05 to 0.10 for paired rows.
+
+Method (label-free). In each COMPASS run, paired donors are pseudo-removed in folds
+of 5, up to `max_pseudo` (default 40), and the run is refitted with the same
+`missing_control` rule. A pseudo donor has a gamma with its control missing and a gamma
+with its own control. Isotonic regression of the paired gamma on the pseudo-missing
+gamma maps the non-paired rows, per run and per kind of control (borrowed or
+population). The calibrated gamma never exceeds the raw gamma. The call is
+`compass_call` (calibrated gamma > 0.5). No responder labels are used.
+
+Choices and why (simulation of the 2026-11-07 design, 4 markers, 50% responders;
+dev seeds 1 to 10, held-out seeds 11 to 20; `runs/2026-11-08_u2-compass-calibrate*`):
+
+- Isotonic beat the quantile map (quantile max FPR gap +0.20 to +0.21 on dev, isotonic
+  +0.03 to +0.07). An empirical-null cut (95th percentile of the pseudo-missing gamma of
+  paired non-calls) did no better than isotonic.
+- A bigger pseudo set helps: `"population"` max FPR gap over paired +0.107 with 10
+  pseudo donors, +0.065 with 20, +0.010 with 40. Default 40.
+- Minimum: 15 paired donors per run (at least 3 pseudo donors above and 3 not above
+  gamma 0.5). With 10 to 14 pseudo donors the map gave FPR +0.11 over paired. Below the
+  minimum the run uses the fallback cut: raw gamma 0.85 sent to 0.5 (Option 2). The cut
+  is the point where mean non-paired minus paired FPR crossed zero on dev seeds 1 to 10
+  of the 2026-11-07 run. It depends on that simulation design. It is safe on FPR and
+  costs power at a rare, weak effect.
+- Tightening only (calibrated call never above the raw call) removed the extra false
+  calls that the map added at a rare, weak effect (held-out FPR gap +0.056 became
+  +0.036 at worst).
+
+Held-out result (seeds 11 to 20, frozen candidate, 40 donors; non-paired against paired
+rows of the same fit):
+
+| Setting | FPR raw | FPR calibrated | FPR paired |
+|---|---|---|---|
+| `"population"`, moderate | 0.21 to 0.24 | 0.06 to 0.09 | 0.07 |
+| `"donor"`, moderate, stable background | 0.05 to 0.14 | 0.03 to 0.05 | 0.07 |
+| rare, weak (both) | 0.02 to 0.06 | 0.01 to 0.06 | 0.005 to 0.02 |
+
+Card bars: non-paired FPR within paired + 0.05 held in 12 of 12 cells (largest gap
++0.037); non-paired AUC fell at most 0.008. Non-paired TPR fell by at most 0.05 in
+8 of 12 cells. The failures are `"donor"` at the rare, weak effect (TPR -0.06, -0.08,
+-0.19 at 10, 25, 50% missing: with half the controls missing, fewer than 15 paired
+donors have a usable borrowed control, so the run uses the fallback cut) and
+`"population"` moderate at 10% missing (-0.05, from 1.00 to 0.95).
+
+Where it does not hold. `"donor"` with a visit effect (background x1.5 at visit 2): the
+later visit keeps FPR 0.33 to 0.95 after calibration (0.82 to 0.95 raw at 10 to 25%
+missing at the moderate effect; 0.57 against 0.93 at 50%). Pseudo-missing gamma cannot
+rank donors there, and the calibration says so: the pseudo AUC is below 0.8 in 100% of
+those runs, and in 0% of the moderate-effect runs without a visit effect. At the rare, weak
+effect the same warning also fires in 10 to 18% of runs without a shift, because few
+paired donors have a call to compare. `control_shift_check` did not help in this design:
+with two visits the donor has one other control, so it is always `"untestable"` (it
+warns for every borrowed row, shifted or not) and never `"differs"`. So the card's
+80% recall holds only in the sense that all rows warn, and the pseudo-AUC warning is the
+usable detector. Controls missing not at random, pattern-specific visit effects and
+more than one stimulation are not simulated.
+
+Cost. 40 donors, 5000 iterations x 4 replications: the plain call takes 19 to 47 s and
+the calibrated call 97 to 394 s (5 to 9 times; held-out median). `max_pseudo` caps
+it: 20 costs about 5 times, 40 about 5 to 9 times.

@@ -188,6 +188,35 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' `"untestable"` (only one control to borrow), and `"differs"` or `"untestable"`
 #' gives a warning. See `docs/adr/0003-compass-missing-control.md`.
 #'
+#' @section Calibrated calls (experimental):
+#' `missing_control_calibrate = TRUE` maps the max mean gamma of non-paired rows onto the
+#' paired scale without responder labels. In each COMPASS run, paired donors are
+#' pseudo-removed in folds of 5 (at most `max_pseudo`, chosen at random), the control is
+#' resolved by the same `missing_control` rule, and the run is refitted. A pseudo donor
+#' then has two gammas: one with its control missing and one with its own control. An
+#' isotonic regression of the paired gamma on the pseudo-missing gamma gives the map. It is
+#' applied to the run's non-paired rows of the same kind (`"donor_visit"` or
+#' `"population"`), and a calibrated gamma never exceeds the raw gamma. Use
+#' `compass_call` (calibrated gamma above 0.5), not raw max gamma above 0.5. `scores` gets
+#' `compass_max_gamma`, `compass_gamma_cal`, `compass_call` and `calibration`
+#' (`"paired"`, `"isotonic"`, `"quantile"` or `"fallback"`); `$calibration$table` has one
+#' line per run and kind and `$calibration$pseudo` has the pseudo pairs.
+#'
+#' A map needs at least 15 pseudo donors, so at least 15 paired donors in the run (with a
+#' usable borrowed control for `"donor"`), and at least 3 pseudo donors with a paired
+#' gamma above 0.5 and 3 not above it. Otherwise the run uses a fallback cut: raw gamma
+#' 0.85 is sent to 0.5. That cut comes from simulation only (the cut at which non-paired
+#' FPR met paired FPR on the dev seeds of `runs/2026-11-07_compass-missing-control/`);
+#' it depends on that design, and it costs power at a rare, weak effect. The assumption
+#' is that the pseudo-missing donors resemble the truly missing ones (controls missing
+#' at random) and that the pseudo gamma ranks donors like the paired gamma. The second is
+#' checked: when the AUC of pseudo-missing gamma for the paired call is below 0.8, a
+#' warning says the calibrated calls there are unreliable. This is the case for `"donor"`
+#' at a visit whose background differs from the borrowed visit. Calibration cannot repair
+#' that case. Cost: about `1 + max_pseudo / 5` COMPASS fits per run with non-paired rows
+#' (5 to 9 times the plain call in the simulation). Numbers:
+#' `docs/adr/0003-compass-missing-control.md`.
+#'
 #' @param x A `cj_data` (or a `cj_fit`, whose `data` is used).
 #' @param category_filter COMPASS category filter; the default is COMPASS's own.
 #' @param verbose Show COMPASS's console output.
@@ -250,7 +279,8 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
               "0.19 to 0.39 at a moderate effect (paired 0.05 to 0.10); power falls at a rare, weak effect."
             else
               "0.06 to 0.17 when the background is stable across visits, 0.4 to 0.55 pooled and 0.81 to 0.94 for the later visit when it rises by 1.5-fold (paired 0.05 to 0.10).",
-            " See docs/adr/0003-compass-missing-control.md.")
+            " Pass missing_control_calibrate = TRUE (needs 15 or more paired donors per run) for a calibrated call. ",
+            "See docs/adr/0003-compass-missing-control.md.")
   bad <- ct$control_shift_check %in% c("differs", "untestable")
   if (any(bad))
     warning(sum(ct$control_shift_check %in% "differs"), " borrowed control(s) come from a visit whose background ",
@@ -320,8 +350,9 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
     low <- !is.na(cal$info$pseudo_auc) & cal$info$pseudo_auc < COMPASS_CAL_MIN_AUC
     if (n_alt) message("missing_control_calibrate: ", sum(scores$calibration %in% cal_method), " row(s) mapped onto the ",
             "paired scale (", cal_method, "), ", n_fb, " on the fallback cut (too few paired donors); ",
-            "use compass_call, not max gamma > 0.5. Calibrated in simulation only; ",
-            "see docs/adr/0003-compass-missing-control.md.")
+            "use compass_call, not max gamma > 0.5. Calibrated in simulation only (40 donors, 4 markers): ",
+            "non-paired FPR then stays within 0.04 of the paired FPR, but \"donor\" at a visit with a ",
+            "shifted background is not repaired; see docs/adr/0003-compass-missing-control.md.")
     if (any(low))
       warning("In ", sum(low), " group(s) a pseudo-missing control does not rank donors like the paired ",
               "control (AUC < ", COMPASS_CAL_MIN_AUC, "); calibrated calls there are unreliable, see ",

@@ -9,6 +9,9 @@ cj_compass(
   category_filter = COMPASS_DEFAULT_FILTER,
   verbose = FALSE,
   missing_control = c("drop", "donor", "population"),
+  missing_control_calibrate = FALSE,
+  max_pseudo = 40L,
+  calibrate_seed = 1L,
   ...
 )
 }
@@ -22,6 +25,19 @@ cj_compass(
 \item{missing_control}{What to do with a stimulated sample that has no control
 sample at its visit: \code{"drop"}, \code{"donor"} or \code{"population"}. See \emph{Missing
 control samples}.}
+
+\item{missing_control_calibrate}{\code{FALSE} (default), \code{TRUE} or \code{"isotonic"}, or
+\code{"quantile"}. With \code{missing_control = "donor"} or \code{"population"}, map the
+max mean gamma of the non-paired rows onto the paired scale with a label-free
+empirical null from the same run. See \emph{Calibrated calls}.}
+
+\item{max_pseudo}{Most paired donors per COMPASS run that are pseudo-removed for the
+calibration (default 40). Each 5 donors cost one extra COMPASS fit per run, so the
+calibrated call costs about \code{1 + max_pseudo / 5} fits per run with non-paired rows. A
+map needs at least 15 pseudo donors, so a cap below 15 always uses the fallback cut.}
+
+\item{calibrate_seed}{Seed for choosing the pseudo-removed donors. The caller's RNG
+state is left as it was.}
 
 \item{...}{Passed to \code{COMPASS::SimpleCOMPASS()}, e.g. \code{iterations},
 \code{replications}, \code{seed}. COMPASS's defaults apply when omitted.}
@@ -105,6 +121,37 @@ two-sample proportion test and a fold difference, both fixed a priori and not
 tuned on benchmark data). \code{control_shift_check} is \code{"ok"}, \code{"differs"} or
 \code{"untestable"} (only one control to borrow), and \code{"differs"} or \code{"untestable"}
 gives a warning. See \code{docs/adr/0003-compass-missing-control.md}.
+}
+
+\section{Calibrated calls (experimental)}{
+
+\code{missing_control_calibrate = TRUE} maps the max mean gamma of non-paired rows onto the
+paired scale without responder labels. In each COMPASS run, paired donors are
+pseudo-removed in folds of 5 (at most \code{max_pseudo}, chosen at random), the control is
+resolved by the same \code{missing_control} rule, and the run is refitted. A pseudo donor
+then has two gammas: one with its control missing and one with its own control. An
+isotonic regression of the paired gamma on the pseudo-missing gamma gives the map. It is
+applied to the run's non-paired rows of the same kind (\code{"donor_visit"} or
+\code{"population"}), and a calibrated gamma never exceeds the raw gamma. Use
+\code{compass_call} (calibrated gamma above 0.5), not raw max gamma above 0.5. \code{scores} gets
+\code{compass_max_gamma}, \code{compass_gamma_cal}, \code{compass_call} and \code{calibration}
+(\code{"paired"}, \code{"isotonic"}, \code{"quantile"} or \code{"fallback"}); \verb{$calibration$table} has one
+line per run and kind and \verb{$calibration$pseudo} has the pseudo pairs.
+
+A map needs at least 15 pseudo donors, so at least 15 paired donors in the run (with a
+usable borrowed control for \code{"donor"}), and at least 3 pseudo donors with a paired
+gamma above 0.5 and 3 not above it. Otherwise the run uses a fallback cut: raw gamma
+0.85 is sent to 0.5. That cut comes from simulation only (the cut at which non-paired
+FPR met paired FPR on the dev seeds of \verb{runs/2026-11-07_compass-missing-control/});
+it depends on that design, and it costs power at a rare, weak effect. The assumption
+is that the pseudo-missing donors resemble the truly missing ones (controls missing
+at random) and that the pseudo gamma ranks donors like the paired gamma. The second is
+checked: when the AUC of pseudo-missing gamma for the paired call is below 0.8, a
+warning says the calibrated calls there are unreliable. This is the case for \code{"donor"}
+at a visit whose background differs from the borrowed visit. Calibration cannot repair
+that case. Cost: about \code{1 + max_pseudo / 5} COMPASS fits per run with non-paired rows
+(5 to 9 times the plain call in the simulation). Numbers:
+\code{docs/adr/0003-compass-missing-control.md}.
 }
 
 \examples{

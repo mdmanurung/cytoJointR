@@ -1,5 +1,16 @@
 # cytoJointR 0.0.0.9000
 
+* `cj_compass(missing_control_calibrate = TRUE)` calibrates the call for rows without a
+  paired control, without responder labels. Paired donors are pseudo-removed in folds
+  of 5 (`max_pseudo`, default 40), the run is refitted, and an isotonic map of the
+  paired gamma on the pseudo-missing gamma is applied to the non-paired rows. Scores gain
+  `compass_max_gamma` (always), and with calibration `compass_gamma_cal`, `compass_call`
+  and `calibration`; the result gains `$calibration`. A run with fewer than 15 paired
+  donors uses a fallback cut (gamma 0.85, from simulation only). In simulation the
+  non-paired FPR stays within 0.04 of the paired FPR; `"donor"` at a visit with a shifted
+  background is not repaired and warns. Cost is 5 to 9 times the plain call.
+  `docs/adr/0003-compass-missing-control.md` has the numbers.
+
 * `cj_compass(missing_control = c("drop", "donor", "population"))` runs COMPASS on
   stimulated samples that have no control sample. `"drop"` (default) is the old
   behaviour. `"donor"` borrows the same donor's control from the nearest other

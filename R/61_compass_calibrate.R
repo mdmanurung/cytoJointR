@@ -113,7 +113,7 @@ compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_fi
 # Returns the scores with compass_gamma_cal, compass_call and calibration, and the
 # per group and class table of what was done.
 compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha = COMPASS_CAL_ALPHA,
-                                     min_pseudo = COMPASS_CAL_MIN_PSEUDO) {
+                                     min_pseudo = COMPASS_CAL_MIN_PSEUDO, null_when_sparse = FALSE) {
   scores$compass_gamma_cal <- scores$compass_max_gamma
   scores$calibration <- ifelse(scores$control_source == "paired", "paired", NA_character_)
   info <- list()
@@ -124,11 +124,15 @@ compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha =
     pos <- ps$gamma_paired > COMPASS_CAL_GAMMA
     enough <- nrow(ps) >= min_pseudo
     ok <- enough && sum(pos) >= COMPASS_CAL_MIN_SIDE && sum(!pos) >= COMPASS_CAL_MIN_SIDE
+    # Too few paired calls among the pseudo donors for a map, but the null (paired non-calls) is there:
+    # the cut stays at 0.5 unless the null itself produces false calls.
+    use_null <- null_when_sparse && !ok && enough && sum(!pos) >= COMPASS_CAL_MIN_SIDE
     auc <- if (nrow(ps)) compass_cal_auc(ps$gamma_pseudo, pos) else NA_real_
-    if (ok) {
+    if (ok || use_null) {
+      m <- if (ok) method else "null_quantile"
       scores$compass_gamma_cal[rows] <- compass_cal_map(scores$compass_max_gamma[rows],
-                                                        ps$gamma_pseudo, ps$gamma_paired, method, alpha)
-      scores$calibration[rows] <- method
+                                                        ps$gamma_pseudo, ps$gamma_paired, m, alpha)
+      scores$calibration[rows] <- m
     } else {
       scores$compass_gamma_cal[rows] <- compass_cal_fallback(scores$compass_max_gamma[rows])
       scores$calibration[rows] <- "fallback"

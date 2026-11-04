@@ -37,6 +37,7 @@ Test files are in `tests/testthat/`.
 | 4 | Per-donor score draws exported (`cj_score_draws()`) | DONE | `test-scores.R`, `helper-scores-draws.R` |
 | 5 | COMPASS adapter: FS, PFS, `Response()`, filters, heatmap | DONE | `test-compass.R` |
 | 5 | COMPASS without a control sample: `missing_control = "donor"` or `"population"`, `control_source` | DONE | `test-compass.R`; calibration `scripts/75_calibrate-compass-missing-control.R`, `runs/2026-11-07_compass-missing-control/`; `docs/adr/0003` |
+| 5 | Label-free calibration of non-paired COMPASS calls: `missing_control_calibrate = TRUE` | PARTIAL | `test-compass-calibrate.R`; `scripts/76`, `77`, `runs/2026-11-08_u2-compass-calibrate*`; `docs/adr/0003`. Holds for `"population"` and `"donor"` with a stable background (FPR within 0.04 of paired, 40 donors). Not for `"donor"` with a visit effect (warns). Needs 15 or more paired donors per run; costs 5 to 9 times the plain call. |
 | 5 | COMPASS posterior differences | PARTIAL | not wrapped; `COMPASS::PosteriorDiff()` runs on `cj_compass()$fits` and is not tested here |
 | 6 | Static ggplot2 plots | DONE | forest, response heatmap, contribution bars in `test-scores.R` |
 | 7 | Adoption API: `cj_gate()` (tail, quantile, manual), `cj_plot_gate()`, `cj_from_cells()` | DONE | `test-adoption.R`; tail gate misclassifies under 0.5% of simulated cells |

@@ -40,34 +40,43 @@ report_global <- function(sc, which) {
 #'    interval.
 #'
 #' @section Magnitude model:
-#' `magnitude_model = "c0"` (default) is the conjugate model C0: an independent
-#' Dirichlet(`a0` + counts) per sample, no Stan, no pooling, a few seconds for
-#' 24 donors. `"m1dm"` calls `cj_fit(model = "m1dm", level = "sample")`, which
-#' pools donors and needs CmdStan (about 15 to 25 seconds for 24 donors and 3
-#' markers; give extra arguments in `fit_args`, for example `level =
-#' "structured"`). A `cj_fit` given as `x` is used as it is for the magnitudes,
-#' and `magnitude_model` is ignored.
+#' `magnitude_model = "c0eb"` (default) is an empirical-Bayes pooled conjugate
+#' model, no Stan, 3 to 5 seconds for 24 donors. Per donor and visit it models the
+#' any-positive fraction of the control, `q`, and the fold change `rho` of each
+#' stimulation, both log-normal across donors. The across-donor means and
+#' standard deviations are fitted from the data by marginal likelihood on a
+#' grid, per parent population and stimulation, with a floor of 0.2 on the log
+#' scale. The stimulated counts also inform `q`, so the baseline, which drives
+#' the true RMS when responses are rare, is estimated from both samples. Within
+#' the positive patterns each sample keeps C0's Dirichlet(`a0` + counts). Extra
+#' arguments (`sd_min`, `pool_patterns`) go in `fit_args`.
+#'
+#' `"c0"` is the plain conjugate model: an independent Dirichlet(`a0` + counts)
+#' per sample, no pooling. `"m1dm"` calls `cj_fit(model = "m1dm", level =
+#' "sample")`, which pools donors in Stan and needs CmdStan (14 to 24 seconds for
+#' 24 donors; arguments in `fit_args`, for example `level = "structured"`). A
+#' `cj_fit` given as `x` is used as it is for the magnitudes, and
+#' `magnitude_model` is ignored.
 #'
 #' In the benchmark simulations (24 donors, 10,000 parent cells, 3 or 4 markers,
 #' seeds 11 to 20, held out), Spearman with the true donor RMS, pooled over
 #' scenarios and seeds, was:
 #'
-#' | scenario | COMPASS FS | C0 RMS | m1dm RMS |
-#' |---|---|---|---|
-#' | rare, weak | 0.50 | 0.69 | 0.82 |
-#' | moderate | 0.72 | 0.98 | 0.99 |
+#' | scenario | COMPASS FS | C0 | C0-EB (default) | m1dm |
+#' |---|---|---|---|---|
+#' | rare, weak | 0.50 | 0.69 | 0.82 | 0.82 |
+#' | moderate | 0.72 | 0.98 | 0.99 | 0.99 |
 #'
-#' Within one replicate, the C0 gain over FS at the rare, weak effect is small
-#' (+0.06, 95% interval -0.00 to 0.12 over seeds); the pooled gain also reflects
-#' FS changing scale between data sets. m1dm gains +0.20 (0.15 to 0.26) within
-#' replicates. Use m1dm when the ranking of rare, weak responses matters.
-#'
-#' The 90% intervals covered the true RMS in 0.92 to 0.96 (C0) and 0.91 to 0.98
-#' (m1dm) of donor contrasts. C0 intervals describe the sampled donor-visit
-#' only: against a structured truth with sample-level noise (generator B) they
-#' covered 0.42. **CPS from C0 is not reliable** (dev Spearman -0.6 to 0.7 and
-#' coverage 0.25 to 1.00 across scenarios): take CPS from `"m1dm"`. NICR and
-#' Poly-NICR bootstrap intervals cover cell sampling within a sample only.
+#' Within one replicate at the rare, weak effect, the gain over FS was +0.06
+#' (95% interval -0.00 to 0.12 over seeds) for C0, +0.21 (0.15 to 0.27) for
+#' C0-EB and +0.20 (0.15 to 0.26) for m1dm. The 90% intervals covered the true
+#' RMS in 0.85 to 0.94 of donor contrasts for C0-EB (0.89 to 0.94 at the rare,
+#' weak effect), 0.92 to 0.96 for C0 and 0.91 to 0.98 for m1dm. The intervals
+#' describe the sampled donor-visit: against a structured truth with
+#' sample-level noise (generator B) they covered 0.43. **CPS from C0 or C0-EB is
+#' not reliable** (dev Spearman -0.6 to 0.7, coverage 0.2 to 1.00 across
+#' scenarios): take CPS from `"m1dm"`. NICR and Poly-NICR bootstrap intervals
+#' cover cell sampling within a sample only.
 #'
 #' @section Concordance:
 #' The COMPASS call is `compass_response_degree1 > response_threshold`
@@ -93,7 +102,7 @@ report_global <- function(sc, which) {
 #'   required, as in [cj_run_compass()]).
 #' @param markers,samples,gate,transform,control Used only when `x` is a cell
 #'   data frame; see [cj_from_cells()].
-#' @param magnitude_model `"c0"` (default, no Stan) or `"m1dm"`.
+#' @param magnitude_model `"c0eb"` (default, no Stan), `"c0"` (no Stan) or `"m1dm"`.
 #' @param missing_control Passed to [cj_run_compass()]. Rows borrowed from
 #'   another control get COMPASS numbers but no magnitude (`"not_assessed"`).
 #' @param level Interval level for the magnitudes (and the NICR bootstrap).
@@ -109,11 +118,11 @@ report_global <- function(sc, which) {
 #' @param n_boot Cell bootstrap replicates for NICR and Poly-NICR. `0` gives
 #'   point estimates only. Needs a cell data frame (or a `cj_data` built with
 #'   `keep_events = TRUE`).
-#' @param a0 Dirichlet prior pseudo-count of C0.
-#' @param n_draws Posterior draws of C0.
-#' @param seed Seed for C0 and the bootstrap.
+#' @param a0 Dirichlet prior pseudo-count of C0 and C0-EB.
+#' @param n_draws Posterior draws of C0 and C0-EB.
+#' @param seed Seed for C0, C0-EB and the bootstrap.
 #' @param fit_args List of further arguments to [cj_fit()] when
-#'   `magnitude_model = "m1dm"`.
+#'   `magnitude_model = "m1dm"`, or to the C0-EB fit (`sd_min`, `pool_patterns`).
 #' @param compass Optional result of [cj_run_compass()] on the same data, to
 #'   skip running COMPASS again.
 #' @param compass_args List of further arguments to [cj_run_compass()]
@@ -142,7 +151,7 @@ report_global <- function(sc, which) {
 #' rep[c("donor_id", "compass_response_degree1", "rms", "rms_lower", "rms_upper", "concordance")]
 #' }
 cj_compass_report <- function(x, markers = NULL, samples = NULL, gate = NULL, transform = NULL,
-                              control = "control", magnitude_model = c("c0", "c0eb", "m1dm"),
+                              control = "control", magnitude_model = c("c0eb", "c0", "m1dm"),
                               missing_control = c("drop", "donor", "population"),
                               level = 0.9, epsilon = REPORT_EPSILON,
                               response_threshold = 0.5, magnitude_floor = NULL,

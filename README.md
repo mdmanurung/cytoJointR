@@ -46,7 +46,7 @@ cj_plot_gate(gate)                              # check every panel
 x  <- cj_from_cells(cells, samples = samples, gate = gate)
 fs <- cj_fluorescence_scores(x, n_boot = 200, seed = 1)  # NICR, Poly-NICR, FIS, iw_FS/PFS
 cp <- cj_run_compass(x)                         # needs COMPASS
-rp <- cj_compass_report(x)                      # COMPASS call + RMS/CPS with 90% interval, concordance
+rp <- cj_compass_report(x)                      # COMPASS call + RMS with 90% interval, concordance
 cj_plot_compass_report(rp)
 ```
 

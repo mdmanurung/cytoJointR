@@ -3,8 +3,9 @@
 * `cj_compass_report()`: one table per donor, stimulation and visit with the COMPASS
   call (FS, PFS, response probability, `control_source`) beside cytoJointR
   magnitudes with 90% intervals (RMS, CPS, per-marker magnitude) and, from cells,
-  NICR and Poly-NICR with a cell bootstrap. The default magnitude is the
-  conjugate C0 model, which needs no Stan; `magnitude_model = "m1dm"` uses the
+  NICR and Poly-NICR with a cell bootstrap. The default magnitude is C0-EB,
+  an empirical-Bayes pooled conjugate model that needs no Stan (`"c0"` is the
+  plain independent Dirichlet); `magnitude_model = "m1dm"` uses the
   structured posterior. A `concordance` column flags a COMPASS call whose RMS
   interval includes 0, and the reverse. `cj_plot_compass_report()` draws the
   table as a forest plot with the COMPASS response as point colour.

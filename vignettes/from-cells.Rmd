@@ -182,9 +182,9 @@ head(pf$net)
 
 COMPASS says who responds, not how large the response is. `cj_compass_report()`
 puts the cytoJointR magnitude and a 90% interval beside each COMPASS call, one
-row per donor, stimulation and visit. The default magnitude is the conjugate C0
-model (an independent Dirichlet posterior per sample): it needs no Stan and
-runs in seconds. `magnitude_model = "m1dm"` uses the structured posterior of
+row per donor, stimulation and visit. The default magnitude is C0-EB, an
+empirical-Bayes pooled conjugate model: it needs no Stan and runs in seconds.
+`magnitude_model = "c0"` is the plain independent-Dirichlet version. `magnitude_model = "m1dm"` uses the structured posterior of
 [cj_fit()] instead. From a cell data frame the report also carries NICR and
 Poly-NICR with a cell bootstrap, per marker, in `attr(, "markers")`.
 
@@ -202,10 +202,10 @@ probability above 0.5. The magnitude is positive when the lower end of the RMS
 interval is above 0. `response_without_magnitude` (COMPASS calls a response, the
 RMS interval includes 0) and `magnitude_without_response` mark rows to look at.
 They are prompts, not errors: a call and an interval answer different questions.
-In simulation (`?cj_compass_report` has the numbers), C0 ranks donor RMS better
-than COMPASS FS, but at a rare, weak response most of that gain is between
-data sets; `m1dm` ranks better within a data set too. C0 intervals describe the
-sampled donor-visit only, and C0 CPS should not be used.
+In simulation (`?cj_compass_report` has the numbers), C0-EB and `m1dm` rank donor
+RMS better than COMPASS FS within a data set, also at a rare, weak response,
+where plain C0 does not. The intervals describe the sampled donor-visit only,
+and CPS from C0 or C0-EB should not be used (take it from `m1dm`).
 
 ```{r report-plot, eval = has_compass, fig.height = 3.5}
 cj_plot_compass_report(rep)

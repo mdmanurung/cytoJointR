@@ -22,13 +22,15 @@ report_data <- function() {
 test_that("C0 report joins COMPASS and magnitudes by contrast and needs no Stan", {
   x <- report_data()
   n <- sum(!is.na(x$contrasts$control_sample_id))
-  rep <- cj_compass_report(x, compass = fake_compass(x, rep(0.9, n)), n_draws = 500, seed = 1)
+  rep <- cj_compass_report(x, magnitude_model = "c0", compass = fake_compass(x, rep(0.9, n)), n_draws = 500, seed = 1)
   expect_s3_class(rep, "cj_compass_report")
   expect_equal(rep$contrast_id, x$contrasts$contrast_id)
   expect_true(all(c("compass_FS", "compass_PFS", "compass_call", "rms", "rms_lower", "rms_upper",
                     "cps", "cps_lower", "cps_upper", "concordance", "discordant") %in% names(rep)))
   expect_true(all(rep$rms_lower <= rep$rms & rep$rms <= rep$rms_upper, na.rm = TRUE))
   expect_equal(unique(rep$magnitude_model), "c0")
+  # The default is C0-EB.
+  expect_equal(unique(cj_compass_report(x, compass = fake_compass(x, rep(0.9, n)), n_draws = 300, seed = 1)$magnitude_model), "c0eb")
   # Same draws, same numbers as the score layer.
   sc <- suppressMessages(cj_scores(cj_fit_dirichlet(x, n_draws = 500, seed = 1), REPORT_EPSILON,
                                    level = 0.9, ccs_gate = NULL))

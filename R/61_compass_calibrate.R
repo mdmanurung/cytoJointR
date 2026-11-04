@@ -11,7 +11,6 @@ COMPASS_CAL_FOLD_SIZE <- 5L   # paired donors pseudo-removed per refit
 COMPASS_CAL_MIN_PSEUDO <- 15L # fewest pseudo-missing donors per map (dev N-sweep: 10-14 paired donors gave FPR +0.11 over paired)
 COMPASS_CAL_MIN_SIDE <- 3L    # fewest pseudo donors with paired gamma above, and not above, 0.5
 COMPASS_CAL_MIN_AUC <- 0.8    # below this the pseudo gamma cannot rank donors; warn
-COMPASS_CAL_MIN_EXCESS <- 0.02 # excess pseudo call rate over the paired one below which a run keeps its raw gamma
 COMPASS_CAL_SWITCH_AUC <- 0.7  # donor runs with pseudo AUC below this switch to the same-visit population control
 COMPASS_CAL_SWITCH_POS <- 5L   # ... if at least this many pseudo donors have a paired call (AUC is noisy below that)
 COMPASS_CAL_BOOT <- 200L      # bootstrap draws for the optional band
@@ -100,7 +99,8 @@ compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_fi
   n_failed <- 0L # pseudo fits that did not run or failed
   for (r in seq_len(reps)) {
     # A new random partition of the paired donors for each repeat.
-    pick <- compass_with_seed(calibrate_seed + r - 1L, lapply(todo, function(g) {
+    # One seed per group, so a group's partition does not depend on which other groups are in the run.
+    pick <- lapply(todo, function(g) compass_with_seed(calibrate_seed + r - 1L, {
       p <- ct$contrast_id[gid == g & ct$control_source == "paired"]
       p <- p[sample.int(length(p), min(length(p), max_pseudo))]
       split(p, rep_len(seq_len(ceiling(length(p) / COMPASS_CAL_FOLD_SIZE)), length(p)))
@@ -143,7 +143,7 @@ compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_fi
 compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha = COMPASS_CAL_ALPHA,
                                      min_pseudo = COMPASS_CAL_MIN_PSEUDO, null_when_sparse = FALSE, fallback = TRUE,
                                      band = NULL, extra_pseudo = NULL, donor_short = c("cut", "pop", "pool"),
-                                     min_excess = COMPASS_CAL_MIN_EXCESS) {
+                                     min_excess = NULL) {
   donor_short <- match.arg(donor_short)
   if (is.null(pseudo$donor_id)) pseudo$donor_id <- seq_len(nrow(pseudo)) # one donor per point
   scores$compass_gamma_cal <- scores$compass_max_gamma

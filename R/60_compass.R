@@ -191,40 +191,45 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' @section Calibrated calls (experimental):
 #' `missing_control_calibrate = TRUE` maps the max mean gamma of non-paired rows onto the
 #' paired scale without responder labels. In each COMPASS run, paired donors are
-#' pseudo-removed in folds of 5 (at most `max_pseudo`, chosen at random), the control is
-#' resolved by the same `missing_control` rule, and the run is refitted. A pseudo donor
-#' then has two gammas: one with its control missing and one with its own control. An
-#' isotonic regression of the paired gamma on the pseudo-missing gamma gives the map. It is
-#' applied to the run's non-paired rows of the same kind (`"donor_visit"` or
-#' `"population"`), and a calibrated gamma never exceeds the raw gamma. Use
-#' `compass_call` (calibrated gamma above 0.5), not raw max gamma above 0.5. `scores` gets
-#' `compass_max_gamma`, `compass_gamma_cal`, `compass_call` and `calibration`
-#' (`"paired"`, `"isotonic"`, `"quantile"` or `"fallback"`); `$calibration$table` has one
-#' line per run and kind and `$calibration$pseudo` has the pseudo pairs.
+#' pseudo-removed in folds of 5 (at most `max_pseudo` per partition, chosen at random), the
+#' control is resolved by the same `missing_control` rule, and the run is refitted. A pseudo
+#' donor then has two gammas: one with its control missing and one with its own control.
+#' `pseudo_reps` random partitions are drawn and their points pooled. An isotonic regression
+#' of the paired gamma on the pseudo-missing gamma gives the map. It is applied to the run's
+#' non-paired rows of the same kind (`"donor_visit"` or `"population"`), and a calibrated
+#' gamma never exceeds the raw gamma. Use `compass_call` (calibrated gamma above 0.5), not
+#' raw max gamma above 0.5. `scores` gets `compass_max_gamma`, `compass_gamma_cal`,
+#' `compass_call`, `calibration` (`"paired"`, `"isotonic"`, `"quantile"`, `"fallback"` or
+#' `"switched"`) and `compass_max_gamma_switch`; `$calibration$table` has one line per run and
+#' kind (with `pseudo_auc`, `excess`, `switched`), `$calibration$pseudo` has the pseudo pairs,
+#' `$calibration$n_failed` counts failed refits and `$calibration$switched` lists switched runs.
 #'
-#' A map needs at least 15 pseudo donors, so at least 15 paired donors in the run (with a
-#' usable borrowed control for `"donor"`), and at least 3 pseudo donors with a paired
-#' gamma above 0.5 and 3 not above it. Otherwise the run uses a fallback cut: raw gamma
-#' 0.85 is sent to 0.5. That cut comes from simulation only (the cut at which non-paired
-#' FPR met paired FPR on the dev seeds of `runs/2026-11-07_compass-missing-control/`);
-#' it depends on that design, and it costs power at a rare, weak effect. The assumption
-#' is that the pseudo-missing donors resemble the truly missing ones (controls missing
-#' at random) and that the pseudo gamma ranks donors like the paired gamma. The second is
-#' checked: when the AUC of pseudo-missing gamma for the paired call is below 0.8, a
-#' warning says the calibrated calls there are unreliable.
+#' A map needs at least 15 distinct pseudo donors, so at least 15 paired donors in the run
+#' (with a usable borrowed control for `"donor"`), and at least 3 pseudo donors with a paired
+#' gamma above 0.5 and 3 not above it. Otherwise the run uses a fallback cut: raw gamma 0.85 is
+#' sent to 0.5. That cut comes from simulation only (the cut at which non-paired FPR met paired
+#' FPR on the dev seeds of `runs/2026-11-07_compass-missing-control/`); it depends on that
+#' design, and it costs power at a rare, weak effect. The assumption is that the pseudo-missing
+#' donors resemble the truly missing ones (controls missing at random) and that the pseudo
+#' gamma ranks donors like the paired gamma. The second is checked: when the AUC of
+#' pseudo-missing gamma for the paired call is below 0.8, a warning says the calibrated calls
+#' there are unreliable.
 #'
-#' **Limit: a visit effect with `"donor"`.** If the background differs between visits,
-#' calibration does not repair the false-positive rate at the visit whose control was
-#' borrowed from another visit (simulation: FPR 0.33 to 0.95 after calibration at the
-#' later visit, where the paired FPR is about 0.07). `control_shift_check` cannot warn
-#' about it when a donor has only one other control: with two visits it is always
-#' `"untestable"`, for every borrowed row, shifted or not. The detector to watch is the
-#' pseudo-AUC warning (`$calibration$table$pseudo_auc` below 0.8): it fired in every
-#' simulated run with the shift and in none of the moderate-effect runs without it. At a
-#' rare, weak effect it also fires in about 10 to 18% of runs without a shift. Where it
-#' fires, rank donors only and do not use `compass_call`. Cost: about `1 + max_pseudo / 5` COMPASS fits per run with non-paired rows
-#' (5 to 9 times the plain call in the simulation). Numbers:
-#' `docs/adr/0003-compass-missing-control.md`.
+#' **Visit effect with `"donor"`.** If the background differs between visits, a control
+#' borrowed from another visit is biased and no map repairs it. `control_shift_check` cannot
+#' tell: with two visits it is always `"untestable"`, for every borrowed row. The detector is
+#' the pseudo AUC. With `donor_switch = TRUE` (default), a `"donor"` run whose pseudo AUC is
+#' below 0.7, with at least 5 pseudo donors with a paired call, is refitted with the
+#' same-visit `"population"` control. That control is an all-zero row, which COMPASS compares
+#' with the other donors' controls of the same stimulation, visit and parent population, so it
+#' shares the visit effect. Those rows are calibrated with population-rule pseudo fits and
+#' marked `calibration = "switched"`; `compass_max_gamma_switch` holds their gamma. In
+#' simulation this took the later-visit FPR from 0.8 to 0.9 down to 0.05 to 0.07 (power at a rare, weak
+#' effect falls to the population level, about 0.45). Switching is rare without a shift (0 to 2%
+#' of runs). A shifted background that the pseudo AUC cannot detect (few pseudo donors with a call)
+#' stays unrepaired. Cost: about `pseudo_reps * max_pseudo / 5 + 1` COMPASS fits per run with
+#' non-paired rows, 13 times the plain call with the defaults, plus a second set for switched
+#' runs. Numbers: `docs/adr/0003-compass-missing-control.md`.
 #'
 #' @param x A `cj_data` (or a `cj_fit`, whose `data` is used).
 #' @param category_filter COMPASS category filter; the default is COMPASS's own.

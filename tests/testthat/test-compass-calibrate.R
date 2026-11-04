@@ -245,8 +245,6 @@ sim_cal_data <- function(n_donor = 30, n_miss = 6, seed = 1) {
 test_that("the isotonic path runs end to end with 24 paired donors and keeps rows aligned", {
   skip_if_not_installed("COMPASS")
   d <- sim_cal_data()
-  # The simulated background has no excess of pseudo-missing calls, so switch the no-excess gate off here.
-  testthat::local_mocked_bindings(COMPASS_CAL_MIN_EXCESS = -1, .package = "cytoJointR")
   cc <- suppressWarnings(suppressMessages(cj_compass(
     d$x, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 20, pseudo_reps = 1,
     iterations = 400, replications = 2, seed = 3)))
@@ -278,18 +276,18 @@ test_that("a user seed does not hijack the calibration arguments", {
   expect_equal(nrow(cc$calibration$pseudo), 10)
 })
 
-test_that("a run with no excess of pseudo-missing calls keeps its raw gamma", {
+test_that("the optional no-excess gate keeps the raw gamma (off by default: it let worst seeds through)", {
   set.seed(6)
   pop <- runif(40)
   ps <- data.frame(group = "g", cls = "population", donor_id = 1:40, gamma_pseudo = pop,
                    gamma_paired = pop)    # the pseudo control calls exactly what the paired one calls
   sc <- cal_scores(c(0.9, 0.3), c("population", "population"))
-  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), ps, "isotonic")
+  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), ps, "isotonic", min_excess = 0.02)
   expect_equal(r$scores$calibration, c("raw", "raw"))
   expect_equal(r$scores$compass_gamma_cal, c(0.9, 0.3))
   expect_lte(r$info$excess, 0.02)
   ps$gamma_pseudo <- pmin(1, ps$gamma_pseudo + 0.3)   # pseudo control now calls too many donors
-  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), ps, "isotonic")
+  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), ps, "isotonic", min_excess = 0.02)
   expect_equal(unique(r$scores$calibration), "isotonic")
 })
 
@@ -353,6 +351,13 @@ test_that("a donor group with a low pseudo AUC is switched to the same-visit pop
   # The switched control has the same-visit background: a switched non-responder is rarely called.
   truth <- as.integer(sub("D", "", cc$scores$donor_id)) %% 2 == 0
   expect_lt(mean(cc$scores$compass_call[sw & !truth]), 0.3)
+  # The switched rows equal the calibrated rows of a plain "population" run of the same data.
+  pop <- suppressWarnings(suppressMessages(cj_compass(
+    x, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 20, pseudo_reps = 1,
+    iterations = 300, replications = 2, seed = 3)))
+  k <- match(paste(cc$scores$donor_id[sw], cc$scores$visit[sw]), paste(pop$scores$donor_id, pop$scores$visit))
+  expect_equal(cc$scores$compass_gamma_cal[sw], pop$scores$compass_gamma_cal[k])
+  expect_equal(cc$scores$compass_max_gamma_switch[sw], pop$scores$compass_max_gamma[k])
   # Switching off keeps the borrowed calls.
   off <- suppressWarnings(suppressMessages(cj_compass(
     x, missing_control = "donor", missing_control_calibrate = TRUE, donor_switch = FALSE, max_pseudo = 20,

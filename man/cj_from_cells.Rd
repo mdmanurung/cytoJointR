@@ -59,6 +59,11 @@ pattern it is negative.
 \code{keep_events = TRUE}. \code{\link[=cj_fluorescence_scores]{cj_fluorescence_scores()}} needs it for the
 cell-level bootstrap. It adds one numeric matrix of events by markers.
 }
+
+With a per-batch gate (\code{cj_gate(by = )}), every event is first moved by its
+batch's cut minus the pooled cut. One threshold (the pooled cut) then applies
+to all samples, and \code{sx}, \code{ss} and the stored events are relative to each
+batch's own cut.
 }
 \examples{
 sim <- cj_simulate_cells(donors = 6, cells_per_sample = 300, seed = 1)

@@ -19,6 +19,36 @@
   unchanged. `cj_run_compass()` passes both arguments on. Needs the posterior package. The check costs
   about `n_runs` times one fit.
 
+* `cj_compass_report()`: one table per donor, stimulation and visit with the COMPASS
+  call (FS, PFS, response probability, `control_source`) beside cytoJointR
+  magnitudes with 90% intervals (RMS, CPS, per-marker magnitude) and, from cells,
+  NICR and Poly-NICR with a cell bootstrap. The default magnitude is C0-EB,
+  an empirical-Bayes pooled conjugate model that needs no Stan (`"c0"` is the
+  plain independent Dirichlet); `magnitude_model = "m1dm"` uses the
+  structured posterior. C0-EB warns for a parent population with fewer than 8 donor-visit blocks, fills a partial `epsilon` from the defaults, and warns when `a0`, `n_draws` or `fit_args` are ignored. A `concordance` column flags a COMPASS call whose RMS
+  interval includes 0, and the reverse. `cj_plot_compass_report()` draws the
+  table as a forest plot with the COMPASS response as point colour.
+
+* Hardened `cj_gate()` (all additions; defaults unchanged).
+  `by = "<samples column>"` finds one cut per batch on that batch's control events
+  and `cj_from_cells()` applies it (events are moved by the batch cut minus the
+  pooled cut); batches with too few control events (`min_batch_events`, default
+  1000) warn and take the pooled cut. `method = "auto"` chooses tail or quantile
+  per marker from a label-free shape statistic of the control events (the tail
+  ratio, with a cap on the control mass above the tail cut), with constants fixed
+  from simulation. `$qc` and `print()` carry three flags per marker:
+  `cut_in_broad_tail`, `high_control_positive`, `batch_cut_spread`;
+  `cj_plot_gate()` titles each panel with them and draws the batch cuts.
+  `cj_cofactor()` and `cofactor = "auto"` give a label-free asinh cofactor from the
+  width of the negative peak; a cofactor named by marker is accepted.
+  `cj_simulate_gate_cells()` simulates controls with clean and heavy upper tails,
+  weak positives in the control and batch offsets, with a truth column. The rule,
+  its dev evidence and the held-out FlowJo comparison are in the vignette
+  `from-cells` and `runs/2026-11-08_gating-hardening/`. On two public FCS datasets
+  (9 markers), the old tail gate had mean kappa 0.604 against the expert gates;
+  tail + `by` + `cofactor = "auto"` had 0.825. `method = "auto"` did not help there
+  (0.761) and is experimental.
+
 * `cj_compass(missing_control = c("drop", "donor", "population"))` runs COMPASS on
   stimulated samples that have no control sample. `"drop"` (default) is the old
   behaviour. `"donor"` borrows the same donor's control from the nearest other

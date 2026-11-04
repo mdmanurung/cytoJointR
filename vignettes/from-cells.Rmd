@@ -72,6 +72,89 @@ Here the true gate is 0. The tail gate misclassifies
 `r sprintf("%.2f%%", 100 * mean(unlist(lapply(markers, function(m) (cells[[m]] > gate$thresholds[[m]]) != (cells[[m]] > 0)))))`
 of cells against it.
 
+### When the control is not a clean Gaussian peak
+
+The tail gate reads the negative peak from its lower half. It fails when the
+upper tail is heavy or when batches shift the channel offset. Three options
+address that, and each reads control events only.
+
+`method = "auto"` picks tail or quantile per marker. Its statistic is the *tail
+ratio*: the distance from the mode to the 99th percentile of the control events,
+over what the lower-half spread predicts for a symmetric peak. It is about 1 for
+a clean peak. Above 1.5 (the 99th percentile of the Gaussian null at 1000 events
+or more) the marker gets the control quantile, unless over 3% of the control lies
+above the tail cut. Then it is more likely a positive population than a tail, and
+the tail cut stays. The reason is in `gate$auto`.
+
+```{r gate-auto}
+sg <- cj_simulate_gate_cells(c("clean", "skewed"), c("IFNG", "IL21"), batches = 3,
+                             batch_shift = 1.5, samples_per_batch = 3,
+                             cells_per_sample = 2000, seed = 2)
+g_auto <- cj_gate(sg$cells, c("IFNG", "IL21"), sg$samples, method = "auto",
+                  transform = "none", control = "unstim", by = "batch")
+g_auto$auto[c("marker", "tail_ratio", "excess", "choice", "reason")]
+```
+
+`by = "batch"` finds one cut per batch (here a column of the sample table) and
+`cj_from_cells()` applies it. A batch with fewer than `min_batch_events` control
+events warns and takes the pooled cut. Three QC flags are printed and drawn on the
+gate plot:
+
+* `cut_in_broad_tail`: the control density at the cut is above 5% of the peak.
+* `high_control_positive`: over 1% of the control lies above the tail-rule cut.
+* `batch_cut_spread`: the batch cuts span more than one negative-peak spread.
+
+```{r gate-qc}
+g_auto
+cj_plot_gate(g_auto)
+```
+
+A flag is a prompt to look, not a verdict. A marker with real unstimulated
+expression (IL-10-like) is flagged `high_control_positive`, and no automatic cut
+is reliable there; set it by hand or gate on the stimulated-minus-control contrast.
+
+For raw fluorescence, `cofactor = "auto"` (or `cj_cofactor()`) sets the asinh
+cofactor to 3 times the one-sided spread of the negative peak of the raw control
+events, per marker. The negative peak and the cut then sit in the near-linear zone
+of the transform. The rule is scale-free: rescaling a channel rescales its cofactor.
+
+```{r cofactor}
+raw <- sg$cells
+raw[c("IFNG", "IL21")] <- 400 * raw[c("IFNG", "IL21")]  # arbitrary raw units
+cj_cofactor(raw, c("IFNG", "IL21"), sg$samples, control = "unstim")
+```
+
+**Evidence.** The rule and its constants were fixed on simulated controls with a
+known truth (`scripts/97_*`, `98_*`, `99_*`, `101_*` in the reproducibility
+repository, run directory `runs/2026-11-08_gating-hardening/`), and then compared
+with expert FlowJo gates on two public datasets, once.
+
+| Held-out FlowJo comparison (Cohen's kappa, stimulated positive control, mean of 9 markers) | mean kappa |
+|---|---|
+| old: tail, pooled cut, fixed cofactor (2000 malaria, 150 C9orf72) | 0.604 |
+| tail, pooled, `cofactor = "auto"` | 0.791 |
+| tail, `by = "screen"`, fixed cofactor | 0.637 |
+| tail, `by = "screen"`, `cofactor = "auto"` | 0.825 |
+| `method = "auto"`, pooled, fixed cofactor | 0.599 |
+| `method = "auto"`, `by`, `cofactor = "auto"` | 0.761 |
+
+Malaria has no batch column, so `by` changes only the four C9orf72 markers. The
+comparison was run once on the frozen code (commit bbb996e) and no rule was
+changed afterwards. The gain comes from the cofactor rule (malaria IL-21 kappa
+0.33 to 0.72, CD107a 0.75 to 0.91; C9orf72 IL-17 0.36 to 0.94) and from batch
+cuts (C9orf72 IL-4 0.74 to 0.85, IL-10 0.09 to 0.23 to
+0.64). The tail/quantile selector did not help: it switched only C9orf72 IFN-gamma
+(pooled, fixed cofactor) and IL-10 (with the auto cofactor), and both lost
+agreement (0.97 to 0.92, 0.37 to 0.06). The IL-21 failure was a transform failure,
+not a heavy tail: its tail ratio is 0.4. So `method = "auto"` stays experimental,
+and the recommended call is `method = "tail"` (default) with `by` and
+`cofactor = "auto"`. The QC flags describe the control distribution; they did not
+track FlowJo agreement one for one (they fire on C9orf72 IFN-gamma, kappa 0.97,
+because of screen offsets, and stay silent on IL-21). The cofactor and batch gains
+were each frozen as components before the comparison, but the recommended
+combination was picked among eight scored candidates, so its kappa is optimistic.
+
+
 ## Cells to `cj_data`
 
 `cj_from_cells()` applies the gate, tabulates exact patterns per sample and
@@ -177,6 +260,42 @@ pattern at zero, so `polyics_net_any` is not the signed net percent of
 pf <- cj_run_polyicsflow(x)
 head(pf$net)
 ```
+
+## Magnitudes beside COMPASS calls
+
+COMPASS says who responds, not how large the response is. `cj_compass_report()`
+puts the cytoJointR magnitude and a 90% interval beside each COMPASS call, one
+row per donor, stimulation and visit. The default magnitude is C0-EB, an
+empirical-Bayes pooled conjugate model: it needs no Stan and runs in seconds.
+`magnitude_model = "c0"` is the plain independent-Dirichlet version. `magnitude_model = "m1dm"` uses the structured posterior of
+[cj_fit()] instead. From a cell data frame the report also carries NICR and
+Poly-NICR with a cell bootstrap, per marker, in `attr(, "markers")`.
+
+```{r report, eval = has_compass}
+rep <- cj_compass_report(cells, markers, samples, transform = "none", control = "unstim",
+                         gate_args = list(method = "quantile"), n_boot = 50,
+                         compass_args = list(iterations = 200, replications = 2))
+rep
+rep[c("donor_id", "compass_response_degree1", "rms", "rms_lower", "rms_upper", "concordance")]
+head(attr(rep, "markers")[c("contrast_id", "marker", "nicr", "nicr_lo", "nicr_hi")], 4)
+```
+
+`concordance` compares the two answers. The COMPASS call is a response
+probability above 0.5. The magnitude is positive when the lower end of the RMS
+interval is above 0. `response_without_magnitude` (COMPASS calls a response, the
+RMS interval includes 0) and `magnitude_without_response` mark rows to look at.
+They are prompts, not errors: a call and an interval answer different questions.
+In simulation (`?cj_compass_report` has the numbers), C0-EB and `m1dm` rank donor
+RMS better than COMPASS FS within a data set, also at a rare, weak response,
+where plain C0 does not. The intervals describe the sampled donor-visit only,
+and CPS from C0 or C0-EB should not be used (take it from `m1dm`).
+
+```{r report-plot, eval = has_compass, fig.height = 3.5}
+cj_plot_compass_report(rep)
+```
+
+Position is the RMS with its interval; colour is the COMPASS response
+probability; triangles are discordant rows.
 
 ## Everything at once
 

@@ -74,7 +74,11 @@ of 5, up to `max_pseudo` (default 40), and the run is refitted with the same
 `missing_control` rule. A pseudo donor has a gamma with its control missing and a gamma
 with its own control. Isotonic regression of the paired gamma on the pseudo-missing
 gamma maps the non-paired rows, per run and per kind of control (borrowed or
-population). The calibrated gamma never exceeds the raw gamma. The call is
+population). The calibrated gamma never exceeds the raw gamma. A pseudo fit has its pseudo-removed donors
+plus the truly missing ones with no control, so the pseudo fit sees a higher missing fraction
+than the real fit (by up to 5 donors per fold); its gamma is slightly more liberal than the
+real missing-control gamma would be, which biases the map toward being too lenient at high
+missing rates. The warning on a poor pseudo AUC applies only to runs that used the map. The call is
 `compass_call` (calibrated gamma > 0.5). No responder labels are used.
 
 Choices and why (simulation of the 2026-11-07 design, 4 markers, 50% responders;

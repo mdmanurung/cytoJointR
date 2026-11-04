@@ -57,10 +57,10 @@ compass_cal_map <- function(new, pop, paired, method = c("isotonic", "quantile",
     return(stats::approx(c(0, cut, 1), c(0, COMPASS_CAL_GAMMA, 1), xout = new)$y)
   }
   if (method == "isotonic_call") paired <- as.numeric(paired > COMPASS_CAL_GAMMA)
-  if (method == "quantile")
-    return(unname(stats::quantile(paired, stats::ecdf(pop)(new), type = 1)))
   # One distinct pseudo-missing gamma carries no ranking: every row gets the paired mean.
   if (length(unique(pop)) < 2L) return(rep(mean(paired), length(new)))
+  if (method == "quantile")
+    return(unname(stats::quantile(paired, stats::ecdf(pop)(new), type = 1)))
   o <- order(pop)
   iso <- stats::isoreg(pop[o], paired[o])
   stats::approx(pop[o], iso$yf, xout = new, ties = mean, rule = 2)$y
@@ -84,6 +84,7 @@ compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_fi
   }))
   names(pick) <- todo
   out <- list()
+  n_failed <- 0L # pseudo fits that did not run or failed
   for (k in seq_len(max(lengths(pick), 0L))) {
     forced <- unlist(lapply(pick, \(f) f[k][[1L]]), use.names = FALSE)
     if (is.null(forced)) next
@@ -92,11 +93,12 @@ compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_fi
     for (g in todo) {
       ids <- pick[[g]][k][[1L]]
       cg <- ck[gk == g, ]
-      if (is.null(ids) || !all(ids %in% cg$contrast_id)) next
+      if (is.null(ids)) next
+      if (!all(ids %in% cg$contrast_id)) { n_failed <- n_failed + 1L; next }
       cg <- cg[order(cg$donor_id), ]
       prep <- compass_prepare_group(cg, x, ord, nm, null_col, category_filter)
       fit <- compass_run_group(prep, cg, verbose, ...)
-      if (is.character(fit)) next
+      if (is.character(fit)) { n_failed <- n_failed + 1L; next }
       d <- cg$donor_id[cg$contrast_id %in% ids]
       out[[length(out) + 1L]] <- data.frame(
         group = g, donor_id = d,
@@ -106,7 +108,11 @@ compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_fi
         gamma_paired = unname(compass_max_gamma(fits[[g]])[d]))
     }
   }
-  if (length(out)) do.call(rbind, out) else NULL
+  res <- if (length(out)) do.call(rbind, out) else
+    data.frame(group = character(), donor_id = character(), cls = character(), fold = integer(),
+               gamma_pseudo = numeric(), gamma_paired = numeric())
+  attr(res, "n_failed") <- n_failed
+  res
 }
 
 # Add the calibrated gamma to the tidy scores. Paired rows keep their raw gamma.
@@ -121,6 +127,7 @@ compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha =
   for (key in unique(paste(gid_scores, cls)[scores$control_source != "paired"])) {
     rows <- which(paste(gid_scores, cls) == key & scores$control_source != "paired")
     ps <- pseudo[paste(pseudo$group, pseudo$cls) == key, ]
+    ps <- ps[is.finite(ps$gamma_pseudo) & is.finite(ps$gamma_paired), ]
     pos <- ps$gamma_paired > COMPASS_CAL_GAMMA
     enough <- nrow(ps) >= min_pseudo
     ok <- enough && sum(pos) >= COMPASS_CAL_MIN_SIDE && sum(!pos) >= COMPASS_CAL_MIN_SIDE
@@ -141,7 +148,8 @@ compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha =
     info[[key]] <- data.frame(group = sub(" (donor_visit|population)$", "", key),
                               control_class = sub("^.* ", "", key), n_rows = length(rows),
                               n_pseudo = nrow(ps), n_pseudo_above = sum(pos),
-                              pseudo_auc = auc, method = scores$calibration[rows[1L]])
+                              pseudo_auc = auc, method = scores$calibration[rows[1L]],
+                              used_map = ok || use_null)
   }
   # Calibration only tightens: a non-paired row is never called when the raw rule would not
   # call it. Dev: this removed the extra false calls that the map added at a rare, weak effect.

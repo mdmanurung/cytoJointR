@@ -267,10 +267,19 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
                        missing_control = c("drop", "donor", "population"),
                        missing_control_calibrate = FALSE, max_pseudo = 40L, calibrate_seed = 1L, ...) {
   compass_require()
+  # SimpleCOMPASS() calls set.seed(): give the caller's RNG state back on exit.
+  had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  if (had_seed) old_seed <- get(".Random.seed", envir = globalenv())
+  on.exit(if (had_seed) assign(".Random.seed", old_seed, envir = globalenv()) else
+    suppressWarnings(rm(".Random.seed", envir = globalenv())), add = TRUE)
   missing_control <- match.arg(missing_control)
+  if (missing_control == "drop" && !isFALSE(missing_control_calibrate))
+    warning("missing_control_calibrate is ignored with missing_control = \"drop\": no row runs ",
+            "without a paired control", call. = FALSE)
   cal_method <- if (isFALSE(missing_control_calibrate)) NA_character_ else
     if (isTRUE(missing_control_calibrate)) "isotonic" else
       match.arg(missing_control_calibrate, c("isotonic", "quantile"))
+  if (missing_control == "drop") cal_method <- NA_character_
   if (inherits(x, "cj_fit")) x <- x$data
   if (!inherits(x, "cj_data")) stop("x must be a cj_data or cj_fit", call. = FALSE)
   if (grepl("[&!+*?()\\[\\]{}|^$\\\\]", paste(x$markers, collapse = ""), perl = TRUE))
@@ -335,13 +344,13 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
     tidy[[g]] <- data.frame(
       contrast_id = cg$contrast_id, donor_id = cg$donor_id, stimulation = cg$stimulation,
       visit = cg$visit, parent_population = cg$parent_population,
-      compass_max_gamma = unname(compass_max_gamma(fit)[cg$donor_id]),
       compass_FS = unname(COMPASS::FunctionalityScore(fit)[cg$donor_id]),
       compass_PFS = unname(COMPASS::PolyfunctionalityScore(fit)[cg$donor_id]),
       compass_response_degree1 = unname(resp(1)),
       compass_response_degree2 = unname(resp(2)),
       control_source = cg$control_source, control_fallback = cg$control_fallback,
-      control_shift_check = cg$control_shift_check)
+      control_shift_check = cg$control_shift_check,
+      compass_max_gamma = unname(compass_max_gamma(fit)[cg$donor_id]))
   }
   bind <- function(l) if (length(l)) do.call(rbind, unname(l))
   scores <- bind(tidy)
@@ -350,13 +359,16 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
     pseudo <- if (n_alt) compass_pseudo_fits(x, ct, fits, gid, ord, nm, null_col, category_filter, verbose,
                                   missing_control, max_pseudo, calibrate_seed, ...)
     gs <- paste(scores$stimulation, scores$visit, scores$parent_population, sep = " | ")
-    if (is.null(pseudo)) pseudo <- data.frame(group = character(), cls = character(),
-                                              gamma_pseudo = numeric(), gamma_paired = numeric())
+    if (is.null(pseudo)) pseudo <- data.frame(group = character(), donor_id = character(), cls = character(),
+                                              fold = integer(), gamma_pseudo = numeric(), gamma_paired = numeric())
+    n_failed <- if (is.null(attr(pseudo, "n_failed"))) 0L else attr(pseudo, "n_failed")
+    if (n_failed) message(n_failed, " pseudo-missing refit(s) failed or could not run; the map uses the folds ",
+                          "that did (see $calibration$n_failed)")
     cal <- compass_calibrate_scores(scores, gs, pseudo, cal_method)
     scores <- cal$scores
-    calibration <- list(table = cal$info, pseudo = pseudo)
+    calibration <- list(table = cal$info, pseudo = pseudo, n_failed = n_failed)
     n_fb <- sum(scores$calibration %in% "fallback")
-    low <- !is.na(cal$info$pseudo_auc) & cal$info$pseudo_auc < COMPASS_CAL_MIN_AUC
+    low <- cal$info$used_map & !is.na(cal$info$pseudo_auc) & cal$info$pseudo_auc < COMPASS_CAL_MIN_AUC
     if (n_alt) message("missing_control_calibrate: ", sum(scores$calibration %in% cal_method), " row(s) mapped onto the ",
             "paired scale (", cal_method, "), ", n_fb, " on the fallback cut (too few paired donors); ",
             "use compass_call, not max gamma > 0.5. Calibrated in simulation only (40 donors, 4 markers): ",

@@ -99,7 +99,7 @@ test_that("missing_control_calibrate adds columns, leaves the default alone, and
   x <- cal_data()
   base <- suppressMessages(cj_compass(x, missing_control = "population", iterations = 200,
                                       replications = 2, seed = 3))
-  expect_true("compass_max_gamma" %in% names(base$scores))
+  expect_equal(tail(names(base$scores), 1), "compass_max_gamma")   # appended last: positional users see no change
   expect_false(any(c("compass_call", "compass_gamma_cal") %in% names(base$scores)))
   expect_null(base$calibration)
   cc <- suppressWarnings(suppressMessages(cj_compass(
@@ -112,7 +112,9 @@ test_that("missing_control_calibrate adds columns, leaves the default alone, and
   expect_equal(cc$scores$compass_call, cc$scores$compass_gamma_cal > 0.5)
   # Only paired donors are pseudo-removed, at most max_pseudo, and their paired gamma is the real fit's.
   ps <- cc$calibration$pseudo
-  expect_lte(nrow(ps), 5)
+  expect_equal(nrow(ps), 5)          # max_pseudo = 5 of 10 paired donors: one fold of 5
+  expect_true(all(ps$fold == 1))
+  expect_equal(cc$calibration$n_failed, 0)
   expect_true(all(ps$donor_id %in% cc$scores$donor_id[pr]))
   real <- cc$scores$compass_max_gamma[match(ps$donor_id, cc$scores$donor_id)]
   expect_equal(ps$gamma_paired, real)
@@ -128,4 +130,138 @@ test_that("missing_control_calibrate with 'drop' or nothing missing is a no-op",
                                     iterations = 100, replications = 2, seed = 3))
   expect_true(all(cc$scores$calibration == "paired"))
   expect_equal(cc$scores$compass_gamma_cal, cc$scores$compass_max_gamma)
+})
+
+test_that("a tied pseudo-missing gamma gives the paired mean for both maps", {
+  pop <- rep(0.3, 20); paired <- c(rep(0, 10), rep(1, 10))
+  for (m in c("isotonic", "quantile"))
+    expect_equal(cytoJointR:::compass_cal_map(c(0.2, 0.9), pop, paired, m), c(0.5, 0.5))
+})
+
+test_that("non-finite pseudo gammas are dropped before counting and mapping", {
+  set.seed(3)
+  pop <- runif(40)
+  ps <- data.frame(group = "g", cls = "population", gamma_pseudo = pop, gamma_paired = as.numeric(pop > 0.7))
+  ps$gamma_pseudo[1:3] <- NA
+  ps$gamma_paired[4:5] <- NaN
+  sc <- cal_scores(c(0.9, 0.6), c("population", "population"))
+  r <- expect_no_error(cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), ps, "isotonic"))
+  expect_equal(r$info$n_pseudo, 35)
+  expect_false(anyNA(r$scores$compass_gamma_cal))
+  # Only NA pseudo rows left: fallback, not an error.
+  ps$gamma_pseudo <- NA_real_
+  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), ps, "isotonic")
+  expect_equal(unique(r$scores$calibration), "fallback")
+})
+
+test_that("two groups get their own maps and the AUC is flagged only where the map was used", {
+  set.seed(4)
+  pop <- runif(40)
+  good <- data.frame(group = "g1", cls = "population", gamma_pseudo = pop, gamma_paired = as.numeric(pop > 0.7))
+  bad <- data.frame(group = "g2", cls = "population", gamma_pseudo = pop, gamma_paired = as.numeric(pop < 0.7))
+  few <- data.frame(group = "g3", cls = "population", gamma_pseudo = pop[1:6], gamma_paired = as.numeric(pop[1:6] < 0.7))
+  sc <- cal_scores(c(0.9, 0.9, 0.9, 0.9), c("population", "population", "population", "paired"))
+  gid <- c("g1", "g2", "g3", "g1")
+  r <- cytoJointR:::compass_calibrate_scores(sc, gid, rbind(good, bad, few), "isotonic")
+  expect_equal(r$scores$calibration, c("isotonic", "isotonic", "fallback", "paired"))
+  expect_true(r$scores$compass_call[1])
+  i <- r$info[match(c("g1", "g2", "g3"), r$info$group), ]
+  expect_equal(i$used_map, c(TRUE, TRUE, FALSE))
+  expect_lt(i$pseudo_auc[2], 0.8)
+})
+
+test_that("cj_compass warns on a poor pseudo AUC, reports failed folds and ignores calibrate under 'drop'", {
+  skip_if_not_installed("COMPASS")
+  x <- cal_data()
+  set.seed(5)
+  pop <- runif(20)
+  fake <- function(...) {
+    ps <- data.frame(group = "CMV | v1 | CD4", donor_id = sprintf("D%d", 5:24), cls = "population", fold = 1L,
+                     gamma_pseudo = pop, gamma_paired = as.numeric(pop < 0.5))
+    attr(ps, "n_failed") <- 2L
+    ps
+  }
+  testthat::local_mocked_bindings(compass_pseudo_fits = fake, .package = "cytoJointR")
+  expect_warning(
+    expect_message(
+      cc <- cj_compass(x, missing_control = "population", missing_control_calibrate = TRUE,
+                       iterations = 100, replications = 2, seed = 3),
+      "2 pseudo-missing refit"),
+    "does not rank donors")
+  expect_equal(cc$calibration$n_failed, 2)
+  expect_true(all(cc$calibration$table$used_map))
+  expect_warning(cd <- cj_compass(x, missing_control = "drop", missing_control_calibrate = TRUE,
+                                  iterations = 100, replications = 2, seed = 3), "ignored")
+  expect_null(cd$calibration)
+  expect_false("compass_call" %in% names(cd$scores))
+})
+
+test_that("cj_compass leaves .Random.seed as it was, also when it was absent", {
+  skip_if_not_installed("COMPASS")
+  x <- cal_data()
+  run <- function() suppressWarnings(suppressMessages(cj_compass(
+    x, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 5,
+    iterations = 100, replications = 2, seed = 3)))
+  had <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  if (had) old <- get(".Random.seed", envir = globalenv())
+  on.exit(if (had) assign(".Random.seed", old, envir = globalenv()), add = TRUE)
+  set.seed(11)
+  before <- get(".Random.seed", envir = globalenv())
+  run()
+  expect_identical(get(".Random.seed", envir = globalenv()), before)
+  rm(".Random.seed", envir = globalenv())
+  run()
+  expect_false(exists(".Random.seed", envir = globalenv(), inherits = FALSE))
+})
+
+# 30 donors, 3 markers, one stimulation; half respond with 3% of stimulated cells moved to A+B.
+# The controls of D1 to D6 are missing.
+sim_cal_data <- function(n_donor = 30, n_miss = 6, seed = 1) {
+  set.seed(seed)
+  markers <- c("A", "B", "C")
+  bits <- cj_bits(markers)
+  pat <- apply(bits, 1, \(b) paste(markers[b == 1L], collapse = "+"))
+  p0 <- apply(bits, 1, \(b) prod(ifelse(b == 1L, 0.03, 0.97)))
+  q <- as.numeric(pat == "A+B")
+  ids <- sprintf("D%02d", seq_len(n_donor))
+  resp <- ids %in% ids[seq(2, n_donor, by = 2)]
+  grid <- expand.grid(donor_id = ids, condition = c("control", "CMV"), stringsAsFactors = FALSE)
+  grid$sample_id <- paste(grid$donor_id, "v1", grid$condition, sep = "_")
+  grid$N <- 30000L
+  grid$counts <- lapply(seq_len(nrow(grid)), \(i) {
+    w <- if (grid$condition[i] == "CMV" && grid$donor_id[i] %in% ids[resp]) 0.03 else 0
+    rmultinom(1, grid$N[i], (1 - w) * p0 + w * q)[, 1]
+  })
+  gone <- paste0(ids[seq_len(n_miss)], "_v1_control")
+  grid <- grid[!grid$sample_id %in% gone, ]
+  counts <- do.call(rbind, grid$counts)
+  dimnames(counts) <- list(grid$sample_id, cytoJointR:::pattern_labels(bits))
+  storage.mode(counts) <- "integer"
+  meta <- data.frame(sample_id = grid$sample_id, donor_id = grid$donor_id, visit = factor("v1"),
+                     parent_population = "CD4", condition = grid$condition, N = grid$N)
+  list(x = cytoJointR:::new_cj_data(counts, meta, cytoJointR:::derive_contrasts(meta), bits), resp = setNames(resp, ids))
+}
+
+test_that("the isotonic path runs end to end with 24 paired donors and keeps rows aligned", {
+  skip_if_not_installed("COMPASS")
+  d <- sim_cal_data()
+  cc <- suppressWarnings(suppressMessages(cj_compass(
+    d$x, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 20,
+    iterations = 400, replications = 2, seed = 3)))
+  expect_equal(nrow(cc$scores), 30)
+  expect_equal(sum(cc$scores$control_source != "paired"), 6)
+  expect_equal(cc$calibration$table$method, "isotonic")
+  expect_equal(nrow(cc$calibration$pseudo), 20)
+  ps <- cc$calibration$pseudo
+  # Pseudo donors are paired donors; their paired gamma is the real fit's value for that donor.
+  f <- cc$fits[[1]]
+  mg <- f$fit$mean_gamma
+  real <- apply(mg[, -ncol(mg), drop = FALSE], 1, max)
+  expect_equal(ps$gamma_paired, unname(real[ps$donor_id]))
+  expect_equal(cc$scores$compass_max_gamma, unname(real[cc$scores$donor_id]))
+  # Responders are enough that the pseudo set holds both calls, so the map is used.
+  expect_true(any(ps$gamma_paired > 0.5) && any(ps$gamma_paired <= 0.5))
+  np <- cc$scores$control_source != "paired"
+  expect_true(all(cc$scores$compass_gamma_cal[np] <= cc$scores$compass_max_gamma[np]))
+  expect_equal(cc$scores$compass_call, cc$scores$compass_gamma_cal > 0.5)
 })

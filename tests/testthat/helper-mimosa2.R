@@ -27,3 +27,15 @@ mimosa2_data <- function(n_donor = 40, n_resp = 20, N = 20000L, seed = 3) {
   samples <- samples[c("sample_id", "donor_id", "visit", "parent_population", "condition", "N")]
   list(x = cytoJointR:::new_cj_data(counts, samples, contrasts, bits), responders = donors[seq_len(n_resp)])
 }
+
+# The internal fit on the hand-built data's four count columns (follow-up visit "post").
+mimosa2_fit_data <- function(x) {
+  ifng <- x$counts[, "IFNG+ TNF-"]
+  donors <- unique(x$samples$donor_id)
+  id <- function(visit, cond) paste(donors, visit, cond, sep = "_")
+  n <- cbind(s1 = ifng[id("post", "CMV")], u1 = ifng[id("post", "control")],
+             s0 = ifng[id("pre", "CMV")], u0 = ifng[id("pre", "control")])
+  N <- matrix(20000, nrow(n), 4, dimnames = dimnames(n))
+  rownames(n) <- rownames(N) <- donors
+  cytoJointR:::mimosa2_fit(n, N, tol = 1e-5, maxit = 100L)
+}

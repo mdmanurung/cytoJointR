@@ -10,7 +10,6 @@ stand_in_compass <- function(x, resp) {
 }
 
 test_that("cj_baseline_report joins both COMPASS visits to MIMOSA2 and classes every row", {
-  skip_if_not_installed("MIMOSA2")
   b <- mimosa2_data()
   donors <- sprintf("D%02d", 1:40)
   # COMPASS at post: responders D01-D20 called, plus D21-D25 (called at pre too) and D26-D27 (post only).
@@ -35,7 +34,6 @@ test_that("cj_baseline_report joins both COMPASS visits to MIMOSA2 and classes e
 })
 
 test_that("a donor MIMOSA2 left out, or without a baseline COMPASS call, is not assessed", {
-  skip_if_not_installed("MIMOSA2")
   b <- mimosa2_data()
   x <- b$x
   x$contrasts$control_sample_id[x$contrasts$contrast_id == "D03_pre_CD4_CMV"] <- NA
@@ -50,7 +48,6 @@ test_that("a donor MIMOSA2 left out, or without a baseline COMPASS call, is not 
 })
 
 test_that("cj_baseline_report runs real COMPASS when no result is given", {
-  skip_if_not_installed("MIMOSA2")
   skip_if_not_installed("COMPASS")
   b <- mimosa2_data()
   rep <- suppressMessages(cj_baseline_report(b$x, compass_args = list(iterations = 400, replications = 2)))

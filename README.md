@@ -50,6 +50,10 @@ rp <- cj_compass_report(x)                      # COMPASS call + RMS with 90% in
 cj_plot_compass_report(rp)
 ```
 
+For raw fluorescence with batch shifts, `cofactor = "auto"` and `by = "<batch column>"`
+set the asinh cofactor from the negative-peak width and give one cut per batch;
+`print(gate)` and `cj_plot_gate(gate)` show three QC flags per marker.
+
 `cj_quickstart()` runs these in one call. `vignette("from-cells")` has the details.
 
 `vignette("cytoJointR")` walks through the full workflow.

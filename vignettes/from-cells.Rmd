@@ -202,8 +202,10 @@ probability above 0.5. The magnitude is positive when the lower end of the RMS
 interval is above 0. `response_without_magnitude` (COMPASS calls a response, the
 RMS interval includes 0) and `magnitude_without_response` mark rows to look at.
 They are prompts, not errors: a call and an interval answer different questions.
-C0 intervals describe the sampled donor-visit only; see `?cj_compass_report`
-for what they do and do not cover.
+In simulation (`?cj_compass_report` has the numbers), C0 ranks donor RMS better
+than COMPASS FS, but at a rare, weak response most of that gain is between
+data sets; `m1dm` ranks better within a data set too. C0 intervals describe the
+sampled donor-visit only, and C0 CPS should not be used.
 
 ```{r report-plot, eval = has_compass, fig.height = 3.5}
 cj_plot_compass_report(rep)

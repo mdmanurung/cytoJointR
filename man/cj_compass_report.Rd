@@ -104,14 +104,33 @@ interval.
 }
 \section{Magnitude model}{
 
-\code{magnitude_model = "c0"} (default) is the conjugate model
-C0: an independent Dirichlet(\code{a0} + counts) per
-sample, no Stan, no pooling. It is fast and, in the benchmark simulations,
-ranks donor RMS far better than COMPASS FS. Its intervals describe the
-sampled donor-visit only and are narrow when the response is rare: they are
-not a donor-population interval. \code{"m1dm"} calls \code{cj_fit(model = "m1dm", level = "sample")}, which pools donors and needs CmdStan; give extra
-arguments in \code{fit_args}. A \code{cj_fit} given as \code{x} is used as it is (for the
-magnitudes) and \code{magnitude_model} is ignored.
+\code{magnitude_model = "c0"} (default) is the conjugate model C0: an independent
+Dirichlet(\code{a0} + counts) per sample, no Stan, no pooling, a few seconds for
+24 donors. \code{"m1dm"} calls \code{cj_fit(model = "m1dm", level = "sample")}, which
+pools donors and needs CmdStan (about 15 to 25 seconds for 24 donors and 3
+markers; give extra arguments in \code{fit_args}, for example \code{level = "structured"}). A \code{cj_fit} given as \code{x} is used as it is for the magnitudes,
+and \code{magnitude_model} is ignored.
+
+In the benchmark simulations (24 donors, 10,000 parent cells, 3 or 4 markers,
+seeds 11 to 20, held out), Spearman with the true donor RMS, pooled over
+scenarios and seeds, was:\tabular{llll}{
+   scenario \tab COMPASS FS \tab C0 RMS \tab m1dm RMS \cr
+   rare, weak \tab 0.50 \tab 0.69 \tab 0.82 \cr
+   moderate \tab 0.72 \tab 0.98 \tab 0.99 \cr
+}
+
+
+Within one replicate, the C0 gain over FS at the rare, weak effect is small
+(+0.06, 95\% interval -0.00 to 0.12 over seeds); the pooled gain also reflects
+FS changing scale between data sets. m1dm gains +0.20 (0.15 to 0.26) within
+replicates. Use m1dm when the ranking of rare, weak responses matters.
+
+The 90\% intervals covered the true RMS in 0.92 to 0.96 (C0) and 0.91 to 0.98
+(m1dm) of donor contrasts. C0 intervals describe the sampled donor-visit
+only: against a structured truth with sample-level noise (generator B) they
+covered 0.42. \strong{CPS from C0 is not reliable} (dev Spearman -0.6 to 0.7 and
+coverage 0.25 to 1.00 across scenarios): take CPS from \code{"m1dm"}. NICR and
+Poly-NICR bootstrap intervals cover cell sampling within a sample only.
 }
 
 \section{Concordance}{

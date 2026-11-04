@@ -4,12 +4,13 @@
 # (COMPASS-discrete.R): each draw continues the previous one. Independent runs need
 # independent seeds, so the runs here differ in `seed`.
 
-# A priori choices, not tuned on any data. 1.05 is the usual loose R-hat limit for the
+# A priori choices, not tuned on any data. 1.05 is the usual loose limit for the
 # rank-normalised R-hat of Vehtari et al. (2021); 0.5 is the donor-level call of the
 # cytoJointR benchmarks ("max over subsets of mean gamma > 0.5").
-COMPASS_RHAT_MAX <- 1.05
 COMPASS_GAMMA_CALL <- 0.5
-COMPASS_DIAG_MIN_RUNS <- 4L
+# 5, not 4: with an odd number of runs a call never ties, so "the reported call is in the minority" is defined
+# for every donor (4 runs: precision of that flag 0.50 at COMPASS's default iterations, 5 runs: 0.95).
+COMPASS_DIAG_MIN_RUNS <- 5L
 
 # R-hat and bulk ESS of one donor's draws (rows = iterations, columns = runs). Runs that all
 # sit on one value agree exactly (R-hat 1, ESS NA). Constant runs on different values never
@@ -38,7 +39,7 @@ compass_draws <- function(fit) {
 }
 
 # Per-donor diagnostics from a list of COMPASSResult objects fitted with different seeds.
-compass_run_diagnostics <- function(fits) {
+compass_run_diagnostics <- function(fits, rhat_max = Inf) {
   draws <- lapply(fits, compass_draws)
   donors <- rownames(fits[[1L]]$fit$gamma)
   stopifnot("all runs have the same donors" = all(vapply(fits, function(f)
@@ -63,9 +64,13 @@ compass_run_diagnostics <- function(fits) {
     compass_FS_rhat = fs[, "rhat"], compass_FS_ess = fs[, "ess"],
     compass_PFS_rhat = pf[, "rhat"], compass_PFS_ess = pf[, "ess"],
     row.names = NULL)
+  out$compass_call <- max_gamma[, 1L] > COMPASS_GAMMA_CALL # the call of the first run: the one cj_compass() reports
   out$compass_call_disagree <- out$compass_runs_called > 0L & out$compass_runs_called < length(fits)
+  # Runs that make the same call as the reported one; a tie or less means the reported call is not backed.
+  support <- ifelse(out$compass_call, out$compass_runs_called, length(fits) - out$compass_runs_called)
+  out$compass_call_unsupported <- support <= length(fits) / 2
   out$compass_rhat_high <- pmax(out$compass_gamma_rhat, out$compass_FS_rhat,
-                                out$compass_PFS_rhat, na.rm = TRUE) > COMPASS_RHAT_MAX
+                                out$compass_PFS_rhat, na.rm = TRUE) > rhat_max
   out$unstable_call <- out$compass_call_disagree | out$compass_rhat_high
   out
 }
@@ -75,7 +80,7 @@ compass_diagnostics_summary <- function(diag, seconds, n_runs) {
   rows <- lapply(split(diag, diag$group), function(d) data.frame(
     group = d$group[1L], n_runs = n_runs, n_donors = nrow(d),
     n_unstable = sum(d$unstable_call), n_call_disagree = sum(d$compass_call_disagree),
-    n_rhat_high = sum(d$compass_rhat_high),
+    n_call_unsupported = sum(d$compass_call_unsupported), n_rhat_high = sum(d$compass_rhat_high),
     max_rhat = suppressWarnings(max(d$compass_gamma_rhat, d$compass_FS_rhat, d$compass_PFS_rhat,
                                     na.rm = TRUE)),
     min_ess = suppressWarnings(min(d$compass_gamma_ess, d$compass_FS_ess, d$compass_PFS_ess,
@@ -84,14 +89,14 @@ compass_diagnostics_summary <- function(diag, seconds, n_runs) {
   do.call(rbind, unname(rows))
 }
 
-# Validate n_runs / diagnostics. diagnostics = TRUE means at least 4 runs.
+# Validate n_runs / diagnostics. diagnostics = TRUE means at least 5 runs.
 compass_n_runs <- function(n_runs, diagnostics) {
   if (!is.numeric(n_runs) || length(n_runs) != 1L || is.na(n_runs) || n_runs < 1)
     stop("n_runs must be a whole number >= 1", call. = FALSE)
   n_runs <- as.integer(n_runs)
   if (isTRUE(diagnostics)) n_runs <- max(n_runs, COMPASS_DIAG_MIN_RUNS)
-  if (n_runs == 2L || n_runs == 3L)
-    warning("n_runs = ", n_runs, " gives a weak R-hat; use 4 or more", call. = FALSE)
+  if (n_runs %in% 2:3)
+    warning("n_runs = ", n_runs, " gives weak diagnostics; use 5 or more (odd, so a call never ties)", call. = FALSE)
   if (n_runs > 1L && !requireNamespace("posterior", quietly = TRUE))
     stop("The posterior package is required for n_runs > 1", call. = FALSE)
   n_runs

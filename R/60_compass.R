@@ -157,9 +157,33 @@ compass_resolve_controls <- function(x, missing_control) {
 #' * `compass_runs_called`: runs in which the donor's call (max over subsets of
 #'   mean `gamma` > 0.5) is positive, and `compass_max_gamma`, the mean over runs
 #'   of that maximum;
+#' * `compass_call` (the reported call, that of the first run) and
+#'   `compass_call_unsupported`: `TRUE` when at most half of the runs make the
+#'   reported call, so the reported call is probably the odd one out;
 #' * `unstable_call`: `TRUE` when the runs disagree on the call (some, not all,
-#'   are positive; `compass_call_disagree`) or the largest of the three R-hats
-#'   exceeds 1.05 (`compass_rhat_high`).
+#'   are positive; `compass_call_disagree`), or when the largest of the three
+#'   R-hats exceeds `rhat_max` (`compass_rhat_high`).
+#'
+#' Which flag to read (simulation: 40 donors, 4 markers, 12 data sets with weak
+#' effects, 10x-iterations reference from 4 seeds,
+#' `runs/2026-11-08_compass-diagnostics-v3/`; 18 of 480 donors had a reported
+#' call that differed from the reference at COMPASS's default iterations):
+#' * `unstable_call` finds the donors whose call is not reproducible. It caught
+#'   18 of 18 wrong reported calls, but 52 donors were flagged: in most of them
+#'   the reported call happened to be the right one (precision 0.35).
+#' * `compass_call_unsupported` with 5 runs flagged 19 donors, 18 of them wrong
+#'   (recall 1.0, precision 0.95). Use it to decide which calls to recheck. With
+#'   4 runs a 2-2 tie counts as unsupported and the precision falls to 0.50, so
+#'   `diagnostics = TRUE` uses 5.
+#' * With only 1000 iterations (0.1x the default) `compass_call_unsupported`
+#'   found 62% of the wrong calls (precision 0.68) and `unstable_call` 95%
+#'   (precision 0.47): run more iterations first.
+#'
+#' `rhat_max` is `Inf` by default, so R-hat is reported but does not flag. At the
+#' default iterations an R-hat above 1.05 flagged 27% of donors (44% of the
+#' RV144 dev donors) and found no wrong call that run disagreement had missed.
+#' R-hat of 0/1 draws stays high for donors whose call is stable. Use
+#' `rhat_max = 1.05` for the stricter check.
 #'
 #' `diagnostics$summary` counts the flagged donors per run group and gives the
 #' worst R-hat, the lowest ESS and the seconds the group took. The cost is about
@@ -179,7 +203,10 @@ compass_resolve_controls <- function(x, missing_control) {
 #'   one reported in `fits` and in the score columns, so `n_runs = 1` is the old
 #'   behaviour. With `n_runs > 1` the extra fits feed the convergence columns
 #'   described in *Convergence diagnostics* and are then dropped.
-#' @param diagnostics `TRUE` is `n_runs = max(n_runs, 4)`.
+#' @param diagnostics `TRUE` is `n_runs = max(n_runs, 5)`. Five, because an odd number
+#'   of runs never ties on the call.
+#' @param rhat_max A donor is also `unstable_call` when its largest R-hat exceeds
+#'   this. `Inf` (default) never flags on R-hat; the usual limit is 1.05.
 #' @param ... Passed to `COMPASS::SimpleCOMPASS()`, e.g. `iterations`,
 #'   `replications`, `seed`. COMPASS's defaults apply when omitted.
 #' @return A `cj_compass` list with `fits` (named list of `COMPASSResult`),
@@ -205,7 +232,7 @@ compass_resolve_controls <- function(x, missing_control) {
 #' }
 cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FALSE,
                        missing_control = c("drop", "donor", "population"),
-                       n_runs = 1L, diagnostics = FALSE, ...) {
+                       n_runs = 1L, diagnostics = FALSE, rhat_max = Inf, ...) {
   compass_require()
   missing_control <- match.arg(missing_control)
   n_runs <- compass_n_runs(n_runs, diagnostics)
@@ -303,7 +330,7 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
       if (is.character(more)) {
         groups[[g]]$status <- paste("failed (extra runs):", more)
       } else {
-        diag[[g]] <- cbind(group = g, compass_run_diagnostics(c(list(fit), more)))
+        diag[[g]] <- cbind(group = g, compass_run_diagnostics(c(list(fit), more), rhat_max))
         seconds[g] <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
       }
     }

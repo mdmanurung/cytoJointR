@@ -25,7 +25,7 @@ as_cj_data <- function(x, markers, samples, gate, transform, control, ...) {
 #' @param missing_control What to do with stimulated samples that have no
 #'   control: `"drop"` (default), `"donor"` or `"population"`; see [cj_compass()].
 #'   The table gets `control_source`, `control_fallback` and `control_shift_check`.
-#' @param n_runs,diagnostics Convergence diagnostics; see [cj_compass()].
+#' @param n_runs,diagnostics,rhat_max Convergence diagnostics; see [cj_compass()].
 #' @param ... Passed to [cj_compass()] (for example `iterations`, `replications`,
 #'   `seed`).
 #' @param gate_args List of extra arguments for [cj_gate()] (for example
@@ -46,11 +46,11 @@ as_cj_data <- function(x, markers, samples, gate, transform, control, ...) {
 #' }
 cj_run_compass <- function(x, markers = NULL, samples = NULL, gate = NULL, transform = NULL,
                            control = "control", missing_control = c("drop", "donor", "population"),
-                           n_runs = 1L, diagnostics = FALSE, ..., gate_args = list()) {
+                           n_runs = 1L, diagnostics = FALSE, rhat_max = Inf, ..., gate_args = list()) {
   if (!has_pkg("COMPASS")) stop("cj_run_compass() needs the COMPASS package", call. = FALSE)
   d <- do.call(as_cj_data, c(list(x, markers, samples, gate, transform, control), gate_args))
   cc <- cj_compass(d, missing_control = match.arg(missing_control), n_runs = n_runs,
-                  diagnostics = diagnostics, ...)
+                  diagnostics = diagnostics, rhat_max = rhat_max, ...)
   out <- cc$scores
   attr(out, "compass") <- cc
   attr(out, "excluded") <- cc$excluded

@@ -24,10 +24,10 @@ test_that("compass_rhat_ess handles constant and non-mixing runs", {
 
 test_that("compass_n_runs validates and raises diagnostics = TRUE to 4 runs", {
   expect_equal(cytoJointR:::compass_n_runs(1, FALSE), 1L)
-  expect_equal(cytoJointR:::compass_n_runs(1, TRUE), 4L)
-  expect_equal(cytoJointR:::compass_n_runs(6, TRUE), 6L)
+  expect_equal(cytoJointR:::compass_n_runs(1, TRUE), 5L)
+  expect_equal(cytoJointR:::compass_n_runs(7, TRUE), 7L)
   expect_error(cytoJointR:::compass_n_runs(0, FALSE), "n_runs")
-  expect_warning(cytoJointR:::compass_n_runs(2, FALSE), "weak R-hat")
+  expect_warning(cytoJointR:::compass_n_runs(2, FALSE), "weak diagnostics")
 })
 
 test_that("unstable_call is raised by call disagreement or a high R-hat, not otherwise", {
@@ -41,7 +41,14 @@ test_that("unstable_call is raised by call disagreement or a high R-hat, not oth
   expect_equal(d$compass_call_disagree, c(FALSE, TRUE))
   expect_equal(d$unstable_call, c(FALSE, TRUE))
   expect_gt(d$compass_gamma_rhat[2], 1.05)
-  expect_equal(d$unstable_call, d$compass_call_disagree | d$compass_rhat_high)
+  # R-hat flags only when asked to: rhat_max = Inf (default) leaves the call rule alone.
+  expect_false(any(d$compass_rhat_high))
+  strict <- cytoJointR:::compass_run_diagnostics(fits, rhat_max = 1.05)
+  expect_equal(strict$compass_rhat_high[2], TRUE)
+  expect_equal(strict$unstable_call, strict$compass_call_disagree | strict$compass_rhat_high)
+  # d2: two runs call it, run 1 does not, so the reported call has support 2 of 4 (a tie).
+  expect_equal(d$compass_call, c(TRUE, FALSE))
+  expect_equal(d$compass_call_unsupported, c(FALSE, TRUE))
   # Agreeing runs: nobody flagged.
   same <- cytoJointR:::compass_run_diagnostics(lapply(1:4, function(s) fake_fit(hi, seed = s)))
   expect_false(any(same$unstable_call))
@@ -76,10 +83,11 @@ test_that("cj_compass(n_runs, diagnostics) adds convergence columns and keeps ru
   expect_equal(cc$diagnostics$summary$n_donors, nrow(cc$scores))
   # Only the first fit is kept.
   expect_length(cc$fits, 1)
-  # diagnostics = TRUE means 4 runs; the seeds are reproducible.
+  # diagnostics = TRUE means 5 runs; the seeds are reproducible (runs 1-4 are those of n_runs = 4).
   dd <- cj_compass(x, iterations = 300, replications = 2, seed = 5, diagnostics = TRUE)
-  expect_equal(dd$diagnostics$n_runs, 4L)
-  expect_equal(dd$scores$compass_gamma_rhat, cc$scores$compass_gamma_rhat)
+  expect_equal(dd$diagnostics$n_runs, 5L)
+  expect_equal(dd$diagnostics$seeds, 5:9)
+  expect_equal(dd$scores$compass_FS, cc$scores$compass_FS)
   # cj_run_compass passes the option on.
   sim <- cj_simulate_cells(donors = 4, cells_per_sample = 300, seed = 1)
   samples <- unique(sim$cells[c("sample_id", "donor_id", "condition")])

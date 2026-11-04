@@ -159,7 +159,14 @@ cj_compass_report <- function(x, markers = NULL, samples = NULL, gate = NULL, tr
                               fit_args = list(), compass = NULL, compass_args = list(),
                               gate_args = list()) {
   magnitude_model <- match.arg(magnitude_model)
+  epsilon <- unlist(utils::modifyList(as.list(REPORT_EPSILON), as.list(epsilon)))
   if (is.null(magnitude_floor)) magnitude_floor <- epsilon[["RMS"]]
+  if (inherits(x, "cj_fit") && (!missing(magnitude_model) || !missing(a0) || !missing(n_draws) || length(fit_args)))
+    warning("x is a cj_fit: magnitude_model, a0, n_draws and fit_args are ignored", call. = FALSE)
+  else if (magnitude_model == "m1dm" && (!missing(a0) || !missing(n_draws)))
+    warning("a0 and n_draws are ignored by magnitude_model = \"m1dm\"", call. = FALSE)
+  else if (magnitude_model == "c0" && length(fit_args))
+    warning("fit_args is ignored by magnitude_model = \"c0\"", call. = FALSE)
   missing_control <- match.arg(missing_control)
   is_fit <- inherits(x, "cj_fit")
   from_cells <- is.data.frame(x)

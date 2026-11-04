@@ -13,8 +13,6 @@ COMPASS_CAL_MIN_SIDE <- 3L    # fewest pseudo donors with paired gamma above, an
 COMPASS_CAL_MIN_AUC <- 0.8    # below this the pseudo gamma cannot rank donors; warn
 COMPASS_CAL_SWITCH_AUC <- 0.7  # donor runs with pseudo AUC below this switch to the same-visit population control
 COMPASS_CAL_SWITCH_POS <- 5L   # ... if at least this many pseudo donors have a paired call (AUC is noisy below that)
-COMPASS_CAL_BOOT <- 200L      # bootstrap draws for the optional band
-COMPASS_CAL_ALPHA <- 0.05     # "null_quantile": target false-call rate among paired non-calls
 # Fallback cut on raw max gamma (Option 2). From simulation only: the cut at which
 # the non-paired false-positive rate meets the paired rate on the dev seeds of
 # runs/2026-11-07_compass-missing-control (see ADR 0003). It depends on that design.
@@ -48,40 +46,14 @@ compass_cal_auc <- function(pop, pos) {
 # Map raw max gamma `new` onto the paired scale. `pop` and `paired` are the pseudo pairs.
 # "isotonic": monotone regression of paired gamma on pseudo-missing gamma.
 # "quantile": the paired quantile at the rank of `new` among the pseudo-missing gammas.
-# "isotonic_call": the same on the paired call (paired gamma above 0.5) instead of paired gamma.
-# "null_quantile": the empirical null. Pseudo donors whose paired gamma is not above 0.5 are the
-# null; the cut is their (1 - alpha) quantile of pseudo-missing gamma, never below 0.5, and a
-# piecewise-linear map sends that cut to 0.5 (0 and 1 stay).
-compass_cal_map <- function(new, pop, paired, method = c("isotonic", "quantile", "isotonic_call", "null_quantile"),
-                            alpha = COMPASS_CAL_ALPHA, band = NULL, unit = NULL) {
+compass_cal_map <- function(new, pop, paired, method = c("isotonic", "quantile")) {
   method <- match.arg(method)
-  if (method == "null_quantile") {
-    cut <- min(max(COMPASS_CAL_GAMMA, unname(stats::quantile(pop[paired <= COMPASS_CAL_GAMMA], 1 - alpha, type = 1))), 0.999)
-    return(stats::approx(c(0, cut, 1), c(0, COMPASS_CAL_GAMMA, 1), xout = new)$y)
-  }
-  if (method == "isotonic_call") paired <- as.numeric(paired > COMPASS_CAL_GAMMA)
   # One distinct pseudo-missing gamma carries no ranking: every row gets the paired mean.
   if (length(unique(pop)) < 2L) return(rep(mean(paired), length(new)))
   if (method == "quantile")
     return(unname(stats::quantile(paired, stats::ecdf(pop)(new), type = 1)))
-  fit_at <- function(p, y) {
-    o <- order(p)
-    if (length(unique(p)) < 2L) return(rep(mean(y), length(new)))
-    stats::approx(p[o], stats::isoreg(p[o], y[o])$yf, xout = new, ties = mean, rule = 2)$y
-  }
-  est <- fit_at(pop, paired)
-  # band: a lower bootstrap quantile of the isotonic fit over pseudo donors, so a small pseudo set
-  # tightens the map more (a row is called only when even the lower band is above 0.5).
-  if (is.null(band) || method != "isotonic") return(est)
-  boot <- compass_with_seed(1L, vapply(seq_len(COMPASS_CAL_BOOT), \(b) {
-    # Resample donors, not points: repeated partitions give a donor several points.
-    u <- if (is.null(unit)) seq_along(pop) else unit
-    pick <- sample(unique(u), replace = TRUE)
-    i <- unlist(lapply(pick, \(z) which(u == z)))
-    fit_at(pop[i], paired[i])
-  }, numeric(length(new))))
-  boot <- matrix(boot, nrow = length(new))
-  pmin(est, apply(boot, 1L, stats::quantile, probs = band, names = FALSE))
+  o <- order(pop)
+  stats::approx(pop[o], stats::isoreg(pop[o], paired[o])$yf, xout = new, ties = mean, rule = 2)$y
 }
 
 # Option 2: piecewise linear map that sends the fallback cut to 0.5 and keeps 0 and 1.
@@ -101,7 +73,9 @@ compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_fi
     # A new random partition of the paired donors for each repeat.
     # One seed per group, so a group's partition does not depend on which other groups are in the run.
     pick <- lapply(todo, function(g) compass_with_seed(calibrate_seed + r - 1L, {
-      p <- ct$contrast_id[gid == g & ct$control_source == "paired"]
+      i <- which(gid == g & ct$control_source == "paired")
+      # By donor ID, so the draw does not depend on the row order of the data.
+      p <- ct$contrast_id[i][order(ct$donor_id[i])]
       p <- p[sample.int(length(p), min(length(p), max_pseudo))]
       split(p, rep_len(seq_len(ceiling(length(p) / COMPASS_CAL_FOLD_SIZE)), length(p)))
     }))
@@ -140,13 +114,11 @@ compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_fi
 # Add the calibrated gamma to the tidy scores. Paired rows keep their raw gamma.
 # Returns the scores with compass_gamma_cal, compass_call and calibration, and the
 # per group and class table of what was done.
-compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha = COMPASS_CAL_ALPHA,
-                                     min_pseudo = COMPASS_CAL_MIN_PSEUDO, null_when_sparse = FALSE, fallback = TRUE,
-                                     band = NULL, extra_pseudo = NULL, donor_short = c("cut", "pop", "pool"),
-                                     min_excess = NULL) {
-  donor_short <- match.arg(donor_short)
+compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, min_pseudo = COMPASS_CAL_MIN_PSEUDO,
+                                     fallback = TRUE) {
   if (is.null(pseudo$donor_id)) pseudo$donor_id <- seq_len(nrow(pseudo)) # one donor per point
   scores$compass_gamma_cal <- scores$compass_max_gamma
+  scores$compass_max_gamma_switch <- NA_real_
   scores$calibration <- ifelse(scores$control_source == "paired", "paired", NA_character_)
   info <- list()
   cls <- ifelse(startsWith(scores$control_source, "donor_visit"), "donor_visit", "population")
@@ -154,35 +126,16 @@ compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha =
     rows <- which(paste(gid_scores, cls) == key & scores$control_source != "paired")
     ps <- pseudo[paste(pseudo$group, pseudo$cls) == key, ]
     ps <- ps[is.finite(ps$gamma_pseudo) & is.finite(ps$gamma_paired), ]
-    # Too few donor-visit pseudo donors: borrow the map of the population-rule pseudo donors of the same run,
-    # alone ("pop") or pooled with the donor-visit ones ("pool").
-    if (donor_short != "cut" && !is.null(extra_pseudo) && endsWith(key, "donor_visit") &&
-        length(unique(ps$donor_id)) < min_pseudo) {
-      ex <- extra_pseudo[extra_pseudo$group == sub(" (donor_visit|population)$", "", key), ]
-      ex <- ex[is.finite(ex$gamma_pseudo) & is.finite(ex$gamma_paired), ]
-      ps <- if (donor_short == "pop") ex else rbind(ps[names(ex)], ex)
-    }
     pos <- ps$gamma_paired > COMPASS_CAL_GAMMA
     # Donors, not points: a repeated partition gives a donor several points but no new donor.
     n_donor <- length(unique(ps$donor_id))
     n_pos <- length(unique(ps$donor_id[pos]))
-    enough <- n_donor >= min_pseudo
-    ok <- enough && n_pos >= COMPASS_CAL_MIN_SIDE && n_donor - n_pos >= COMPASS_CAL_MIN_SIDE
-    # Too few paired calls among the pseudo donors for a map, but the null (paired non-calls) is there:
-    # the cut stays at 0.5 unless the null itself produces false calls.
-    use_null <- null_when_sparse && !ok && enough && n_donor - n_pos >= COMPASS_CAL_MIN_SIDE
+    ok <- n_donor >= min_pseudo && n_pos >= COMPASS_CAL_MIN_SIDE && n_donor - n_pos >= COMPASS_CAL_MIN_SIDE
     auc <- if (nrow(ps)) compass_cal_auc(ps$gamma_pseudo, pos) else NA_real_
-    # Excess calls: pseudo-missing call rate minus paired call rate over the same donors. When the pseudo
-    # control calls no more donors than the paired one, there is nothing to correct: keep the raw gamma.
-    excess <- if (nrow(ps)) mean(ps$gamma_pseudo > COMPASS_CAL_GAMMA) - mean(ps$gamma_paired > COMPASS_CAL_GAMMA) else NA_real_
-    no_excess <- !is.null(min_excess) && (ok || use_null) && is.finite(excess) && excess <= min_excess
-    if (no_excess) {
-      scores$calibration[rows] <- "raw"
-    } else if (ok || use_null) {
-      m <- if (ok) method else "null_quantile"
+    if (ok) {
       scores$compass_gamma_cal[rows] <- compass_cal_map(scores$compass_max_gamma[rows],
-                                                        ps$gamma_pseudo, ps$gamma_paired, m, alpha, band, ps$donor_id)
-      scores$calibration[rows] <- m
+                                                        ps$gamma_pseudo, ps$gamma_paired, method)
+      scores$calibration[rows] <- method
     } else {
       scores$compass_gamma_cal[rows] <- if (fallback) compass_cal_fallback(scores$compass_max_gamma[rows]) else
         scores$compass_max_gamma[rows]
@@ -191,8 +144,7 @@ compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha =
     info[[key]] <- data.frame(group = sub(" (donor_visit|population)$", "", key),
                               control_class = sub("^.* ", "", key), n_rows = length(rows),
                               n_pseudo = n_donor, n_pseudo_above = n_pos,
-                              pseudo_auc = auc, excess = excess, method = scores$calibration[rows[1L]],
-                              used_map = ok || use_null)
+                              pseudo_auc = auc, method = scores$calibration[rows[1L]], used_map = ok)
   }
   # Calibration only tightens: a non-paired row is never called when the raw rule would not
   # call it. Dev: this removed the extra false calls that the map added at a rare, weak effect.
@@ -211,18 +163,19 @@ compass_switch_groups <- function(bad, scores, gs, x, ord, nm, null_col, categor
                                   cal_method, max_pseudo, calibrate_seed, reps, ...) {
   ct_pop <- compass_resolve_controls(x, "population")$contrasts
   gid_pop <- paste(ct_pop$stimulation, ct_pop$visit, ct_pop$parent_population, sep = " | ")
-  scores$compass_max_gamma_switch <- NA_real_
   done <- list()
-  n_failed <- 0L
   for (g in bad) {
     cg <- ct_pop[gid_pop == g, ]
     cg <- cg[order(cg$donor_id), ]
     fit <- compass_run_group(compass_prepare_group(cg, x, ord, nm, null_col, category_filter), cg, verbose, ...)
-    if (is.character(fit)) { n_failed <- n_failed + 1L; next }
+    if (is.character(fit)) {
+      done[[g]] <- data.frame(group = g, n_rows = 0L, fit_status = paste("failed:", fit), n_failed = NA_integer_,
+                              n_pseudo = NA_integer_, pseudo_auc = NA_real_, method = NA_character_)
+      next
+    }
     ps <- compass_pseudo_fits(x, cg, stats::setNames(list(fit), g), rep(g, nrow(cg)), ord, nm, null_col,
                               category_filter, verbose, missing_control = "population",
                               max_pseudo = max_pseudo, calibrate_seed = calibrate_seed, reps = reps, ...)
-    n_failed <- n_failed + attr(ps, "n_failed")
     in_g <- gs == g
     sc <- scores[in_g, ]
     sc$compass_max_gamma <- unname(compass_max_gamma(fit)[sc$donor_id])
@@ -234,8 +187,12 @@ compass_switch_groups <- function(bad, scores, gs, x, ord, nm, null_col, categor
     scores$compass_max_gamma_switch[take] <- sc$compass_max_gamma[from]
     scores$compass_gamma_cal[take] <- r$scores$compass_gamma_cal[from]
     scores$calibration[take] <- "switched"
-    done[[g]] <- data.frame(group = g, n_rows = length(take), fit_status = "fitted", n_failed = n_failed)
+    # The population calibration of this group: all its non-paired rows share one population class.
+    i <- r$info[r$info$control_class == "population", ][1L, ]
+    done[[g]] <- data.frame(group = g, n_rows = length(take), fit_status = "fitted",
+                            n_failed = attr(ps, "n_failed"), n_pseudo = i$n_pseudo, pseudo_auc = i$pseudo_auc,
+                            method = i$method)
   }
   scores$compass_call <- scores$compass_gamma_cal > COMPASS_CAL_GAMMA
-  list(scores = scores, table = if (length(done)) do.call(rbind, unname(done)), n_failed = n_failed)
+  list(scores = scores, table = if (length(done)) do.call(rbind, unname(done)))
 }

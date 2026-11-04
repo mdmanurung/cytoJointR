@@ -201,8 +201,10 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' raw max gamma above 0.5. `scores` gets `compass_max_gamma`, `compass_gamma_cal`,
 #' `compass_call`, `calibration` (`"paired"`, `"isotonic"`, `"quantile"`, `"fallback"` or
 #' `"switched"`) and `compass_max_gamma_switch`; `$calibration$table` has one line per run and
-#' kind (with `pseudo_auc`, `excess`, `switched`), `$calibration$pseudo` has the pseudo pairs,
-#' `$calibration$n_failed` counts failed refits and `$calibration$switched` lists switched runs.
+#' kind (with `pseudo_auc` and `switched`), `$calibration$pseudo` has the pseudo pairs,
+#' `$calibration$n_failed` counts failed refits of the pseudo fits and `$calibration$switched` lists switched
+#' runs with `fit_status`, the group's own `n_failed`, `n_pseudo`, `pseudo_auc` and `method` of the population
+#' calibration (a warning names switched groups that used the fallback or have pseudo AUC below 0.8).
 #'
 #' A map needs at least 15 distinct pseudo donors, so at least 15 paired donors in the run
 #' (with a usable borrowed control for `"donor"`), and at least 3 pseudo donors with a paired
@@ -223,7 +225,10 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' same-visit `"population"` control. That control is an all-zero row, which COMPASS compares
 #' with the other donors' controls of the same stimulation, visit and parent population, so it
 #' shares the visit effect. Those rows are calibrated with population-rule pseudo fits and
-#' marked `calibration = "switched"`; `compass_max_gamma_switch` holds their gamma. In
+#' marked `calibration = "switched"`; `compass_max_gamma_switch` holds their gamma (it is `NA` for
+#' all other rows, also when no run was switched). A switched row is calibrated to the paired scale of the
+#' switch fit, while the paired rows of its run keep the gamma of the original (donor-rule) fit; the two
+#' paired scales differ slightly because the non-paired rows enter the fit differently. In
 #' simulation (clean test, seeds 31 to 40) this took the later-visit FPR from 0.78 to 0.97 down to
 #' 0.05 to 0.07 at 10 and 25% missing and 0.21 at 50% (moderate effect), and to 0.04 to 0.47 at the rare, weak
 #' effect, where power falls to the population level (0.45 to 0.8). A run is switched without a shift in
@@ -251,7 +256,8 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #'   `"population"` control. See *Calibrated calls*.
 #' @param pseudo_reps Number of random partitions of the paired donors into pseudo-removal folds
 #'   (default 1). The pseudo points of all repeats are pooled for the map.
-#' @param calibrate_seed Seed for choosing the pseudo-removed donors. The caller's RNG
+#' @param calibrate_seed Seed for choosing the pseudo-removed donors; repeat `r` uses
+#'   `calibrate_seed + r - 1`, so adjacent seeds share partitions. The caller's RNG
 #'   state is left as it was.
 #' @param ... Passed to `COMPASS::SimpleCOMPASS()`, e.g. `iterations`,
 #'   `replications`, `seed`. COMPASS's defaults apply when omitted.
@@ -291,6 +297,13 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
     if (isTRUE(missing_control_calibrate)) "isotonic" else
       match.arg(missing_control_calibrate, c("isotonic", "quantile"))
   if (missing_control == "drop") cal_method <- NA_character_
+  if (!is.na(cal_method)) {
+    for (a in c("max_pseudo", "pseudo_reps")) {
+      v <- get(a)
+      if (!is.numeric(v) || length(v) != 1L || !is.finite(v) || v < 1 || v != round(v))
+        stop(a, " must be a single finite whole number of at least 1", call. = FALSE)
+    }
+  }
   if (inherits(x, "cj_fit")) x <- x$data
   if (!inherits(x, "cj_data")) stop("x must be a cj_data or cj_fit", call. = FALSE)
   if (grepl("[&!+*?()\\[\\]{}|^$\\\\]", paste(x$markers, collapse = ""), perl = TRUE))
@@ -390,12 +403,23 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
                                     cal_method, max_pseudo, calibrate_seed, pseudo_reps, ...)
         scores <- sw$scores
         calibration$switched <- sw$table
-        calibration$n_failed <- calibration$n_failed + sw$n_failed
-        cal$info$switched <- cal$info$group %in% sw$table$group & cal$info$control_class == "donor_visit"
+        done <- sw$table$fit_status == "fitted"
+        cal$info$switched <- cal$info$group %in% sw$table$group[done] & cal$info$control_class == "donor_visit"
         calibration$table <- cal$info
-        message(sum(scores$calibration %in% "switched"), " borrowed-control row(s) in ", nrow(sw$table),
-                " group(s) switched to the same-visit population control: the borrowed control did not rank ",
-                "donors like the paired control (pseudo AUC < ", COMPASS_CAL_SWITCH_AUC, ")")
+        if (any(done))
+          message(sum(scores$calibration %in% "switched"), " borrowed-control row(s) in ", sum(done),
+                  " group(s) switched to the same-visit population control: the borrowed control did not rank ",
+                  "donors like the paired control (pseudo AUC < ", COMPASS_CAL_SWITCH_AUC, ")")
+        if (any(!done))
+          warning(sum(!done), " group(s) could not be switched to the population control (the refit failed: ",
+                  paste(sw$table$group[!done], collapse = "; "), "); their borrowed rows keep the donor-control ",
+                  "calibration, see $calibration$switched", call. = FALSE)
+        weak <- done & (sw$table$method %in% "fallback" |
+                          (!is.na(sw$table$pseudo_auc) & sw$table$pseudo_auc < COMPASS_CAL_MIN_AUC))
+        if (any(weak))
+          warning(sum(weak), " switched group(s) are weakly calibrated (population pseudo AUC below ",
+                  COMPASS_CAL_MIN_AUC, " or the fallback cut): ", paste(sw$table$group[weak], collapse = "; "),
+                  "; see $calibration$switched", call. = FALSE)
       }
     }
     n_fb <- sum(scores$calibration %in% "fallback")

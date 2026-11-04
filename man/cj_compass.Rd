@@ -38,7 +38,8 @@ calibration in one partition (default 20). Each 5 donors cost one extra COMPASS 
 calibrated call costs about \code{1 + max_pseudo / 5} fits per run with non-paired rows. A
 map needs at least 15 pseudo donors, so a cap below 15 always uses the fallback cut.}
 
-\item{calibrate_seed}{Seed for choosing the pseudo-removed donors. The caller's RNG
+\item{calibrate_seed}{Seed for choosing the pseudo-removed donors; repeat \code{r} uses
+\code{calibrate_seed + r - 1}, so adjacent seeds share partitions. The caller's RNG
 state is left as it was.}
 
 \item{pseudo_reps}{Number of random partitions of the paired donors into pseudo-removal folds
@@ -146,8 +147,10 @@ gamma never exceeds the raw gamma. Use \code{compass_call} (calibrated gamma abo
 raw max gamma above 0.5. \code{scores} gets \code{compass_max_gamma}, \code{compass_gamma_cal},
 \code{compass_call}, \code{calibration} (\code{"paired"}, \code{"isotonic"}, \code{"quantile"}, \code{"fallback"} or
 \code{"switched"}) and \code{compass_max_gamma_switch}; \verb{$calibration$table} has one line per run and
-kind (with \code{pseudo_auc}, \code{excess}, \code{switched}), \verb{$calibration$pseudo} has the pseudo pairs,
-\verb{$calibration$n_failed} counts failed refits and \verb{$calibration$switched} lists switched runs.
+kind (with \code{pseudo_auc} and \code{switched}), \verb{$calibration$pseudo} has the pseudo pairs,
+\verb{$calibration$n_failed} counts failed refits of the pseudo fits and \verb{$calibration$switched} lists switched
+runs with \code{fit_status}, the group's own \code{n_failed}, \code{n_pseudo}, \code{pseudo_auc} and \code{method} of the population
+calibration (a warning names switched groups that used the fallback or have pseudo AUC below 0.8).
 
 A map needs at least 15 distinct pseudo donors, so at least 15 paired donors in the run
 (with a usable borrowed control for \code{"donor"}), and at least 3 pseudo donors with a paired
@@ -168,7 +171,10 @@ below 0.7, with at least 5 pseudo donors with a paired call, is refitted with th
 same-visit \code{"population"} control. That control is an all-zero row, which COMPASS compares
 with the other donors' controls of the same stimulation, visit and parent population, so it
 shares the visit effect. Those rows are calibrated with population-rule pseudo fits and
-marked \code{calibration = "switched"}; \code{compass_max_gamma_switch} holds their gamma. In
+marked \code{calibration = "switched"}; \code{compass_max_gamma_switch} holds their gamma (it is \code{NA} for
+all other rows, also when no run was switched). A switched row is calibrated to the paired scale of the
+switch fit, while the paired rows of its run keep the gamma of the original (donor-rule) fit; the two
+paired scales differ slightly because the non-paired rows enter the fit differently. In
 simulation (clean test, seeds 31 to 40) this took the later-visit FPR from 0.78 to 0.97 down to
 0.05 to 0.07 at 10 and 25\% missing and 0.21 at 50\% (moderate effect), and to 0.04 to 0.47 at the rare, weak
 effect, where power falls to the population level (0.45 to 0.8). A run is switched without a shift in

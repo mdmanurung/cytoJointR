@@ -162,7 +162,7 @@ test_that("two groups get their own maps and the AUC is flagged only where the m
   few <- data.frame(group = "g3", cls = "population", gamma_pseudo = pop[1:6], gamma_paired = as.numeric(pop[1:6] < 0.7))
   sc <- cal_scores(c(0.9, 0.9, 0.9, 0.9), c("population", "population", "population", "paired"))
   gid <- c("g1", "g2", "g3", "g1")
-  r <- cytoJointR:::compass_calibrate_scores(sc, gid, rbind(good, bad, few), "isotonic", min_excess = NULL)
+  r <- cytoJointR:::compass_calibrate_scores(sc, gid, rbind(good, bad, few), "isotonic")
   expect_equal(r$scores$calibration, c("isotonic", "isotonic", "fallback", "paired"))
   expect_true(r$scores$compass_call[1])
   i <- r$info[match(c("g1", "g2", "g3"), r$info$group), ]
@@ -269,26 +269,67 @@ test_that("the isotonic path runs end to end with 24 paired donors and keeps row
 test_that("a user seed does not hijack the calibration arguments", {
   skip_if_not_installed("COMPASS")
   x <- cal_data()
-  cc <- suppressWarnings(suppressMessages(cj_compass(
+  run <- function(calibrate_seed, seed) suppressWarnings(suppressMessages(cj_compass(
     x, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 5, pseudo_reps = 2,
-    iterations = 100, replications = 2, seed = 3)))
-  expect_equal(sort(unique(cc$calibration$pseudo$rep)), 1:2)
-  expect_equal(nrow(cc$calibration$pseudo), 10)
+    calibrate_seed = calibrate_seed, iterations = 100, replications = 2, seed = seed)))
+  donors <- function(cc) split(cc$calibration$pseudo$donor_id, cc$calibration$pseudo$rep)
+  a <- run(1, 3)
+  expect_equal(sort(unique(a$calibration$pseudo$rep)), 1:2)
+  expect_equal(nrow(a$calibration$pseudo), 10)
+  # Partitions follow calibrate_seed, not the COMPASS seed.
+  expect_equal(donors(run(1, 99)), donors(a))
+  expect_false(identical(donors(run(2, 3))[["1"]], donors(a)[["1"]]) &&
+                 identical(donors(run(5, 3))[["1"]], donors(a)[["1"]]))
 })
 
-test_that("the optional no-excess gate keeps the raw gamma (off by default: it let worst seeds through)", {
-  set.seed(6)
-  pop <- runif(40)
-  ps <- data.frame(group = "g", cls = "population", donor_id = 1:40, gamma_pseudo = pop,
-                   gamma_paired = pop)    # the pseudo control calls exactly what the paired one calls
-  sc <- cal_scores(c(0.9, 0.3), c("population", "population"))
-  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), ps, "isotonic", min_excess = 0.02)
-  expect_equal(r$scores$calibration, c("raw", "raw"))
-  expect_equal(r$scores$compass_gamma_cal, c(0.9, 0.3))
-  expect_lte(r$info$excess, 0.02)
-  ps$gamma_pseudo <- pmin(1, ps$gamma_pseudo + 0.3)   # pseudo control now calls too many donors
-  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), ps, "isotonic", min_excess = 0.02)
-  expect_equal(unique(r$scores$calibration), "isotonic")
+test_that("pseudo_reps and max_pseudo must be whole numbers of at least 1", {
+  skip_if_not_installed("COMPASS")
+  x <- cal_data()
+  call <- function(...) cj_compass(x, missing_control = "population", missing_control_calibrate = TRUE,
+                                   iterations = 100, replications = 2, ...)
+  expect_error(call(pseudo_reps = 0), "pseudo_reps")
+  expect_error(call(pseudo_reps = 1.5), "pseudo_reps")
+  expect_error(call(max_pseudo = NA), "max_pseudo")
+  expect_error(call(max_pseudo = c(5, 10)), "max_pseudo")
+})
+
+test_that("the pseudo draw does not depend on the row order of the data", {
+  skip_if_not_installed("COMPASS")
+  x <- cal_data()
+  y <- x
+  y$contrasts <- x$contrasts[rev(seq_len(nrow(x$contrasts))), ]
+  run <- function(z) suppressWarnings(suppressMessages(cj_compass(
+    z, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 5, pseudo_reps = 2,
+    iterations = 100, replications = 2, seed = 3)))
+  expect_equal(run(y)$calibration$pseudo$donor_id, run(x)$calibration$pseudo$donor_id)
+})
+
+# 14 donors, two stimulations; the CMV and SEB controls of D1 to D4 are missing at the contrast level.
+cal_data2 <- function() {
+  miss <- c(sprintf("D%d_v1_CD4_CMV", 1:4), sprintf("D%d_v1_CD4_SEB", 5:8))
+  d <- cj_example_draws(n_donor = 14, n_draw = 5, markers = c("IFNG", "TNF", "IL2"), visits = "v1",
+                        stimulations = c("CMV", "SEB"), missing_control = miss)
+  example_data(d)
+}
+
+test_that("two stimulations are calibrated in their own groups", {
+  skip_if_not_installed("COMPASS")
+  cc <- suppressWarnings(suppressMessages(cj_compass(
+    cal_data2(), missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 5,
+    pseudo_reps = 1, iterations = 100, replications = 2, seed = 3)))
+  expect_setequal(cc$calibration$table$group, c("CMV | v1 | CD4", "SEB | v1 | CD4"))
+  ps <- cc$calibration$pseudo
+  expect_equal(sort(unique(ps$group)), c("CMV | v1 | CD4", "SEB | v1 | CD4"))
+  expect_equal(as.vector(table(ps$group)), c(5, 5))
+  # Pseudo donors of a stimulation are paired donors of that stimulation.
+  for (g in unique(ps$group)) {
+    st <- sub(" .*", "", g)
+    paired <- cc$scores$donor_id[cc$scores$stimulation == st & cc$scores$control_source == "paired"]
+    expect_true(all(ps$donor_id[ps$group == g] %in% paired))
+  }
+  # Each score row is calibrated by its own group's method.
+  expect_false(anyNA(cc$scores$calibration))
+  expect_equal(nrow(cc$scores), 28)
 })
 
 test_that("repeated partitions give each paired donor one point per repeat and count donors once", {
@@ -363,4 +404,43 @@ test_that("a donor group with a low pseudo AUC is switched to the same-visit pop
     x, missing_control = "donor", missing_control_calibrate = TRUE, donor_switch = FALSE, max_pseudo = 20,
     pseudo_reps = 1, iterations = 300, replications = 2, seed = 3)))
   expect_false("switched" %in% off$scores$calibration)
+})
+
+test_that("a failed switch fit is reported and leaves the borrowed rows alone", {
+  skip_if_not_installed("COMPASS")
+  x <- sim_shift_data()
+  real <- cytoJointR:::compass_run_group
+  # The switch refit is the only call whose non-paired rows are all "population" at v2 under the donor rule.
+  fake <- function(prep, cg, verbose, ...) {
+    if (cg$visit[1] == "v2" && any(cg$control_source == "population") &&
+        !any(startsWith(cg$control_source, "donor_visit"))) "forced failure" else real(prep, cg, verbose, ...)
+  }
+  testthat::local_mocked_bindings(compass_run_group = fake, .package = "cytoJointR")
+  w <- testthat::capture_warnings(
+    cc <- suppressMessages(cj_compass(
+      x, missing_control = "donor", missing_control_calibrate = TRUE, max_pseudo = 20, pseudo_reps = 1,
+      iterations = 300, replications = 2, seed = 3)))
+  expect_true(any(grepl("could not be switched", w)))
+  expect_false("switched" %in% cc$scores$calibration)
+  expect_match(cc$calibration$switched$fit_status, "^failed")
+  expect_equal(cc$calibration$switched$n_rows, 0)
+  expect_true(all(is.na(cc$scores$compass_max_gamma_switch)))
+})
+
+test_that("switched groups keep their own calibration table and column exists without a switch", {
+  skip_if_not_installed("COMPASS")
+  x <- sim_shift_data()
+  cc <- suppressWarnings(suppressMessages(cj_compass(
+    x, missing_control = "donor", missing_control_calibrate = TRUE, max_pseudo = 20, pseudo_reps = 1,
+    iterations = 300, replications = 2, seed = 3)))
+  sw <- cc$calibration$switched
+  expect_equal(sw$fit_status, "fitted")
+  expect_true(all(c("n_failed", "n_pseudo", "pseudo_auc", "method") %in% names(sw)))
+  expect_true(sw$n_pseudo >= 15)
+  v1 <- cal_data()
+  none <- suppressWarnings(suppressMessages(cj_compass(
+    v1, missing_control = "population", missing_control_calibrate = TRUE, max_pseudo = 5, pseudo_reps = 1,
+    iterations = 100, replications = 2, seed = 3)))
+  expect_true("compass_max_gamma_switch" %in% names(none$scores))
+  expect_true(all(is.na(none$scores$compass_max_gamma_switch)))
 })

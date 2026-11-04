@@ -211,3 +211,16 @@ scale. The switch repairs most shifted runs but not all: 92% (moderate) and 71% 
 of the later-visit borrowed rows were switched; the rest keep a high FPR, and the pseudo-AUC
 warning still applies to them. Without a shift 0% (moderate) and 0 to 6% (rare, weak) of rows
 were switched. A switched row has the power of a "population" row (rare, weak TPR 0.45 to 0.81).
+
+Review notes (2026-11-09, after round 2). A switched row is calibrated to the paired scale of the
+switch fit (the group refitted with the population control), while the paired rows of the same
+group keep the gamma of the original donor-rule fit. The two paired scales differ slightly because
+the non-paired rows enter the fit differently. The calibration of each switched group is kept in
+`$calibration$switched` (population pseudo AUC, number of pseudo donors, method, failed refits per
+group) and `cj_compass()` warns when a switched group used the fallback cut or has a pseudo AUC
+below 0.8, and when the switch fit failed (those rows keep the donor-control calibration).
+Adjacent `calibrate_seed` values share partitions (repeat `r` uses `calibrate_seed + r - 1`).
+The pseudo draw sorts paired donors by ID first, so it does not depend on the row order of the
+data. The unused ablation options (bootstrap band, population and pooled maps for short donor
+runs, the no-excess gate, the null-quantile map) were removed from the package; they remain in git
+history (commit d478ef2) and in `scripts/78`.

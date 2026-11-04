@@ -11,7 +11,7 @@
   Scores gain `compass_max_gamma` (always, as the last column so positional use is unchanged),
   and with calibration `compass_gamma_cal`, `compass_call`, `calibration` and
   `compass_max_gamma_switch`; the result gains `$calibration` (table, pseudo pairs, failed
-  refits, switched runs). `cj_compass()` now restores the caller's `.Random.seed`, and the
+  refits, switched runs with their own calibration table). `cj_compass()` now restores the caller's `.Random.seed`, and the
   option is ignored, with a warning, under `missing_control = "drop"`. On a clean held-out
   simulation (40 donors) the non-paired FPR was within 0.05 of the paired FPR in 12 of 12 cells
   (largest gap 0.05; raw rule 9 of 12, up to 0.24). Power at a rare, weak effect with `"donor"`

@@ -23,10 +23,31 @@
   refits, switched runs with their own calibration table). `cj_compass()` now restores the caller's `.Random.seed`, and the
   option is ignored, with a warning, under `missing_control = "drop"`. On a clean held-out
   simulation (40 donors) the non-paired FPR was within 0.05 of the paired FPR in 12 of 12 cells
-  (largest gap 0.05; raw rule 9 of 12, up to 0.24). Power at a rare, weak effect with `"donor"`
-  falls by 0.08 to 0.32. A visit shift with `"donor"` is partly repaired by the switch (later-visit
+  (largest gap 0.04; raw rule 8 of 12, up to 0.22). Power at a rare, weak effect with `"donor"`
+  falls by 0.02 to 0.09; the TPR bar (loss at most 0.05) held in 10 of 12 cells. A visit shift with `"donor"` is partly repaired by the switch (later-visit
   FPR 0.05 to 0.21 at the moderate effect, 0.04 to 0.47 at the rare, weak one, from 0.78 to 0.97).
-  Cost is 12 to 14 times the plain call. `docs/adr/0003-compass-missing-control.md` has the numbers.
+  Cost is 12 to 15 times the plain call. `docs/adr/0003-compass-missing-control.md` has the numbers.
+
+* `cj_read_fcs()` reads pre-gated FCS files (one per sample) into the `cells` table, applying
+  each file's spillover matrix (`compensate = TRUE`); markers are chosen by channel name or
+  exact channel description. `cj_cells_from_gatingset()` does the same for one population of a
+  flowWorkspace `GatingSet`. Both feed `cj_gate()`, `cj_from_cells()` and `cj_quickstart()`.
+
+* `cj_baseline_report()`: one row per donor and follow-up visit with COMPASS at the baseline and
+  follow-up visits beside the baseline-adjusted `cj_mimosa2()` call, and an `agreement` class
+  (`both`, `pre_existing`, `compass_only`, `mimosa2_only`, `neither`, `not_assessed`).
+  `pre_existing` marks donors COMPASS calls at both visits whose response MIMOSA2 does not
+  see rise.
+
+* `cj_mimosa2()` is a native implementation of the MIMOSA2 design (ADR 0004; no upstream code, no
+  extra package) for baseline-adjusted positivity calls: one fit per stimulation, parent
+  population and follow-up visit, with each donor's stimulated and control samples at the baseline
+  and the follow-up visit. One subset per fit: `positive = "any"` (any marker positive) or one
+  marker. Donors without all four samples are listed in `excluded`. Scores give the four counts,
+  `delta`, `mimosa2_p_response`, `mimosa2_fdr` (q-values within one fit), `mimosa2_response` and
+  `control_source`; `cj_mimosa2_fit` objects are in `fits`. `missing_control = "marginal"` lets a
+  donor with one missing control enter. In a held-out simulation its false-positive rate stayed
+  within 0.05 of paired donors in 24 of 24 cells; it costs power (TPR 0.06 to 0.32 lower).
 
 * `cj_compass(n_runs = , diagnostics = )` checks convergence of the COMPASS call. COMPASS's
   `replications` are passes of one chain, not independent chains, so the check refits with seeds

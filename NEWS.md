@@ -1,5 +1,24 @@
 # cytoJointR 0.0.0.9000
 
+* `cj_compass(n_runs = , diagnostics = )` checks convergence of the COMPASS call. COMPASS's
+  `replications` are passes of one chain, not independent chains, so the check refits with seeds
+  `seed`, `seed + 1`, ... (`diagnostics = TRUE` means at least 5 runs, so a call never ties) and treats the fits as chains.
+  Per donor and stimulation, `scores` gains rank-normalised R-hat and bulk ESS of the posterior
+  response probability (mean of `gamma`), FS and PFS (`compass_gamma_rhat`, `compass_FS_ess`, ...), the
+  number of runs that call the donor (max mean `gamma` > 0.5), `unstable_call` (the runs disagree on
+  that call; with `rhat_max = 1.05` also when an R-hat exceeds it) and `compass_call_unsupported` (at
+  most half of the runs make the reported call). R-hat does not flag by default: it found no wrong
+  call that run disagreement missed and flagged 27% of simulated donors.
+  Simulation behind the defaults (40 donors, 4 markers, 12 weak-effect data sets, a 10x-iterations
+  reference from 4 seeds; 18 of 480 donors had a wrong reported call at default iterations): with 5 runs
+  `unstable_call` has recall 1.00 and precision 0.35, `compass_call_unsupported` recall 1.00 and
+  precision 0.95; with 4 runs the latter's precision is 0.50 (ties). At 0.1x iterations their recalls are
+  0.95 and 0.63. R-hat above 1.05 flagged 27% of donors (precision 0.12). On 131 RV144 dev donors with
+  5 runs, 1 donor was unstable at default and at 2x iterations, none unsupported. `cj_compass()$diagnostics$summary` counts flagged donors and
+  gives the runtime. The reported scores are those of the first run, so `n_runs = 1` (default) is
+  unchanged. `cj_run_compass()` passes both arguments on. Needs the posterior package. The check costs
+  about `n_runs` times one fit.
+
 * `cj_compass_report()`: one table per donor, stimulation and visit with the COMPASS
   call (FS, PFS, response probability, `control_source`) beside cytoJointR
   magnitudes with 90% intervals (RMS, CPS, per-marker magnitude) and, from cells,

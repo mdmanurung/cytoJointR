@@ -13,7 +13,8 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
-      # Optional Suggests (COMPASS, flowWorkspace, ComplexHeatmap) are not installed;
+      # MIMOSA2 (pure R) is installed so its tests run. Other optional Suggests
+      # (COMPASS, flowWorkspace, ComplexHeatmap) are not installed;
       # their tests and vignette chunks skip. COMPASS 1.49 fails to compile on
       # current R (uses the removed DATAPTR API).
       _R_CHECK_FORCE_SUGGESTS_: false
@@ -27,7 +28,7 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           dependencies: '"hard"'
-          extra-packages: any::rcmdcheck, any::testthat, any::knitr, any::rmarkdown, any::withr
+          extra-packages: any::rcmdcheck, any::testthat, any::knitr, any::rmarkdown, any::withr, github::RGLab/MIMOSA2
           needs: check
       - name: Install CmdStan
         run: cmdstanr::install_cmdstan(cores = 2)

@@ -8,9 +8,10 @@
 # A priori constants (not tuned on any labels).
 COMPASS_CAL_GAMMA <- 0.5      # the call: max mean gamma above this
 COMPASS_CAL_FOLD_SIZE <- 5L   # paired donors pseudo-removed per refit
-COMPASS_CAL_MIN_PSEUDO <- 10L # fewest pseudo-missing donors per map
+COMPASS_CAL_MIN_PSEUDO <- 15L # fewest pseudo-missing donors per map (dev N-sweep: 10-14 paired donors gave FPR +0.11 over paired)
 COMPASS_CAL_MIN_SIDE <- 3L    # fewest pseudo donors with paired gamma above, and not above, 0.5
 COMPASS_CAL_MIN_AUC <- 0.8    # below this the pseudo gamma cannot rank donors; warn
+COMPASS_CAL_ALPHA <- 0.05     # "null_quantile": target false-call rate among paired non-calls
 # Fallback cut on raw max gamma (Option 2). From simulation only: the cut at which
 # the non-paired false-positive rate meets the paired rate on the dev seeds of
 # runs/2026-11-07_compass-missing-control (see ADR 0003). It depends on that design.
@@ -44,8 +45,18 @@ compass_cal_auc <- function(pop, pos) {
 # Map raw max gamma `new` onto the paired scale. `pop` and `paired` are the pseudo pairs.
 # "isotonic": monotone regression of paired gamma on pseudo-missing gamma.
 # "quantile": the paired quantile at the rank of `new` among the pseudo-missing gammas.
-compass_cal_map <- function(new, pop, paired, method = c("isotonic", "quantile")) {
+# "isotonic_call": the same on the paired call (paired gamma above 0.5) instead of paired gamma.
+# "null_quantile": the empirical null. Pseudo donors whose paired gamma is not above 0.5 are the
+# null; the cut is their (1 - alpha) quantile of pseudo-missing gamma, never below 0.5, and a
+# piecewise-linear map sends that cut to 0.5 (0 and 1 stay).
+compass_cal_map <- function(new, pop, paired, method = c("isotonic", "quantile", "isotonic_call", "null_quantile"),
+                            alpha = COMPASS_CAL_ALPHA) {
   method <- match.arg(method)
+  if (method == "null_quantile") {
+    cut <- min(max(COMPASS_CAL_GAMMA, unname(stats::quantile(pop[paired <= COMPASS_CAL_GAMMA], 1 - alpha, type = 1))), 0.999)
+    return(stats::approx(c(0, cut, 1), c(0, COMPASS_CAL_GAMMA, 1), xout = new)$y)
+  }
+  if (method == "isotonic_call") paired <- as.numeric(paired > COMPASS_CAL_GAMMA)
   if (method == "quantile")
     return(unname(stats::quantile(paired, stats::ecdf(pop)(new), type = 1)))
   # One distinct pseudo-missing gamma carries no ranking: every row gets the paired mean.
@@ -101,7 +112,8 @@ compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_fi
 # Add the calibrated gamma to the tidy scores. Paired rows keep their raw gamma.
 # Returns the scores with compass_gamma_cal, compass_call and calibration, and the
 # per group and class table of what was done.
-compass_calibrate_scores <- function(scores, gid_scores, pseudo, method) {
+compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha = COMPASS_CAL_ALPHA,
+                                     min_pseudo = COMPASS_CAL_MIN_PSEUDO) {
   scores$compass_gamma_cal <- scores$compass_max_gamma
   scores$calibration <- ifelse(scores$control_source == "paired", "paired", NA_character_)
   info <- list()
@@ -110,12 +122,12 @@ compass_calibrate_scores <- function(scores, gid_scores, pseudo, method) {
     rows <- which(paste(gid_scores, cls) == key & scores$control_source != "paired")
     ps <- pseudo[paste(pseudo$group, pseudo$cls) == key, ]
     pos <- ps$gamma_paired > COMPASS_CAL_GAMMA
-    ok <- nrow(ps) >= COMPASS_CAL_MIN_PSEUDO && sum(pos) >= COMPASS_CAL_MIN_SIDE &&
-      sum(!pos) >= COMPASS_CAL_MIN_SIDE
+    enough <- nrow(ps) >= min_pseudo
+    ok <- enough && sum(pos) >= COMPASS_CAL_MIN_SIDE && sum(!pos) >= COMPASS_CAL_MIN_SIDE
     auc <- if (nrow(ps)) compass_cal_auc(ps$gamma_pseudo, pos) else NA_real_
     if (ok) {
       scores$compass_gamma_cal[rows] <- compass_cal_map(scores$compass_max_gamma[rows],
-                                                        ps$gamma_pseudo, ps$gamma_paired, method)
+                                                        ps$gamma_pseudo, ps$gamma_paired, method, alpha)
       scores$calibration[rows] <- method
     } else {
       scores$compass_gamma_cal[rows] <- compass_cal_fallback(scores$compass_max_gamma[rows])

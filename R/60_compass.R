@@ -194,6 +194,16 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' @param missing_control What to do with a stimulated sample that has no control
 #'   sample at its visit: `"drop"`, `"donor"` or `"population"`. See *Missing
 #'   control samples*.
+#' @param missing_control_calibrate `FALSE` (default), `TRUE` or `"isotonic"`, or
+#'   `"quantile"`. With `missing_control = "donor"` or `"population"`, map the
+#'   max mean gamma of the non-paired rows onto the paired scale with a label-free
+#'   empirical null from the same run. See *Calibrated calls*.
+#' @param max_pseudo Most paired donors per COMPASS run that are pseudo-removed for the
+#'   calibration (default 40). Each 5 donors cost one extra COMPASS fit per run, so the
+#'   calibrated call costs about `1 + max_pseudo / 5` fits per run with non-paired rows. A
+#'   map needs at least 15 pseudo donors, so a cap below 15 always uses the fallback cut.
+#' @param calibrate_seed Seed for choosing the pseudo-removed donors. The caller's RNG
+#'   state is left as it was.
 #' @param ... Passed to `COMPASS::SimpleCOMPASS()`, e.g. `iterations`,
 #'   `replications`, `seed`. COMPASS's defaults apply when omitted.
 #' @return A `cj_compass` list with `fits` (named list of `COMPASSResult`),
@@ -217,7 +227,7 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' }
 cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FALSE,
                        missing_control = c("drop", "donor", "population"),
-                       missing_control_calibrate = FALSE, max_pseudo = 20L, calibrate_seed = 1L, ...) {
+                       missing_control_calibrate = FALSE, max_pseudo = 40L, calibrate_seed = 1L, ...) {
   compass_require()
   missing_control <- match.arg(missing_control)
   cal_method <- if (isFALSE(missing_control_calibrate)) NA_character_ else

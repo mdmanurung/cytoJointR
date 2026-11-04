@@ -1,5 +1,10 @@
 # cytoJointR 0.0.0.9000
 
+* `cj_read_fcs()` reads pre-gated FCS files (one per sample) into the `cells` table, applying
+  each file's spillover matrix (`compensate = TRUE`); markers are chosen by channel name or
+  exact channel description. `cj_cells_from_gatingset()` does the same for one population of a
+  flowWorkspace `GatingSet`. Both feed `cj_gate()`, `cj_from_cells()` and `cj_quickstart()`.
+
 * `cj_compass(n_runs = , diagnostics = )` checks convergence of the COMPASS call. COMPASS's
   `replications` are passes of one chain, not independent chains, so the check refits with seeds
   `seed`, `seed + 1`, ... (`diagnostics = TRUE` means at least 5 runs, so a call never ties) and treats the fits as chains.

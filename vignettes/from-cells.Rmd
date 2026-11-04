@@ -41,6 +41,24 @@ head(cells[c("sample_id", markers)], 3)
 table(samples$condition)
 ```
 
+### Cells from FCS files or a GatingSet
+
+Two readers build `cells` from cytometry files. `cj_read_fcs()` reads one FCS
+file per sample, applies the file's own spillover matrix and keeps the chosen
+markers, by channel name or exact channel description. The files must hold the
+parent population only, for example CD4 T cells exported from FlowJo.
+`cj_cells_from_gatingset()` takes the events of one gated population of a
+flowWorkspace `GatingSet`, for data gated in FlowJo (imported with CytoML) or
+with an openCyto template. Neither reader transforms; choose the transform in
+`cj_gate()`, and use `transform = "none"` for GatingSet data that are already
+transformed.
+
+```{r read, eval = FALSE}
+files <- list.files("exports/CD4", pattern = "\\.fcs$", full.names = TRUE)
+cells <- cj_read_fcs(files, c(IFNG = "IFNg BV421", TNF = "TNFa PE", IL2 = "IL2 APC"))
+cells <- cj_cells_from_gatingset(gs, "CD4", c(IFNG = "IFNg BV421", TNF = "TNFa PE", IL2 = "IL2 APC"))
+```
+
 The simulator calls the unstimulated sample `"unstim"`. The package wants
 `"control"` internally, so every function takes `control = "unstim"` and
 recodes it.

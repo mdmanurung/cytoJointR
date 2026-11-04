@@ -12,13 +12,14 @@
 # mu, sd_q, lambda_m and sd_r are fitted per parent population (and stimulation) by marginal maximum
 # likelihood on a grid, so they come from the data. The stimulated counts also inform q_b, which
 # is why the baseline is estimated better than from the control alone. Within the positive patterns each
-# sample gets Dirichlet(a0 + kappa * pooled share + counts); kappa comes from a Dirichlet-multinomial
-# marginal likelihood (kappa = 0 recovers C0's within-positive part).
+# sample gets Dirichlet(a0 + counts), as C0. With pool_patterns = TRUE the prior is a0 + kappa * pooled share,
+# kappa from a Dirichlet-multinomial marginal likelihood; dev simulations showed it shrinks CPS too far
+# (coverage 0.2-0.5), so it is off by default.
 
 EB_Q_POINTS <- 300L # grid points for log q
 EB_R_POINTS <- 140L # grid points for log rho
 EB_LOG_RHO <- c(-5, 6) # range of log rho
-EB_SD_MIN <- 0.05 # lower bound of the fitted standard deviations (log scale)
+EB_SD_MIN <- 0.3 # lower bound of the fitted standard deviations (log scale); chosen on dev seeds 1-10, see runs/2026-11-08_compass-magnitudes
 EB_SD_MAX <- 3
 EB_KAPPA_MAX <- 1e4
 
@@ -71,7 +72,7 @@ eb_kappa_ll <- function(log_kappa, Y, w) {
 }
 
 #' @noRd
-cj_fit_dirichlet_eb <- function(x, a0 = 0.5, n_draws = 4000L, seed = 1L, pool_patterns = TRUE,
+cj_fit_dirichlet_eb <- function(x, a0 = 0.5, n_draws = 4000L, seed = 1L, pool_patterns = FALSE,
                                 sd_min = EB_SD_MIN) {
   stopifnot(inherits(x, "cj_data"), a0 > 0)
   set.seed(seed)

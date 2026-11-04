@@ -24,6 +24,7 @@ Suggests:
     ComplexHeatmap,
     flowCore,
     flowWorkspace,
+    flowWorkspaceData,
     knitr,
     openCyto,
     polyICSFlow,

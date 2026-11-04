@@ -132,6 +132,37 @@ test_that("missing_control_calibrate with 'drop' or nothing missing is a no-op",
   expect_equal(cc$scores$compass_gamma_cal, cc$scores$compass_max_gamma)
 })
 
+test_that("calibration and convergence diagnostics work together: one compass_max_gamma, run 1 is calibrated", {
+  skip_if_not_installed("COMPASS")
+  skip_if_not_installed("posterior")
+  x <- cal_data()
+  args <- list(x, missing_control = "population", iterations = 150, replications = 2, seed = 3)
+  one <- suppressWarnings(suppressMessages(do.call(cj_compass, c(args, list(
+    missing_control_calibrate = TRUE, max_pseudo = 5, pseudo_reps = 1)))))
+  both <- suppressWarnings(suppressMessages(do.call(cj_compass, c(args, list(
+    missing_control_calibrate = TRUE, max_pseudo = 5, pseudo_reps = 1, n_runs = 3)))))
+  s <- both$scores
+  # Both outputs are present, with no duplicated column.
+  expect_false(anyDuplicated(names(s)) > 0)
+  expect_true(all(c("compass_gamma_cal", "calibration", "compass_call", "compass_call_raw",
+                    "compass_max_gamma", "compass_max_gamma_mean", "unstable_call") %in% names(s)))
+  expect_false(is.null(both$calibration))
+  expect_equal(both$diagnostics$n_runs, 3L)
+  # Run 1 is the reported fit and the one calibrated: same numbers as the calibrated single run.
+  expect_equal(s$compass_max_gamma, one$scores$compass_max_gamma)
+  expect_equal(s$compass_gamma_cal, one$scores$compass_gamma_cal)
+  expect_equal(s$compass_call, one$scores$compass_call)
+  expect_equal(both$calibration$pseudo, one$calibration$pseudo)
+  # compass_call is calibrated; compass_call_raw is run 1's raw call, so calibration only removes calls.
+  expect_equal(s$compass_call, s$compass_gamma_cal > 0.5)
+  expect_equal(s$compass_call_raw, s$compass_max_gamma > 0.5)
+  expect_false(any(s$compass_call & !s$compass_call_raw))
+  pr <- s$control_source == "paired"
+  expect_equal(s$compass_call[pr], s$compass_call_raw[pr])
+  # The mean over runs is a separate column and lies in [0, 1].
+  expect_true(all(s$compass_max_gamma_mean >= 0 & s$compass_max_gamma_mean <= 1))
+})
+
 test_that("a tied pseudo-missing gamma gives the paired mean for both maps", {
   pop <- rep(0.3, 20); paired <- c(rep(0, 10), rep(1, 10))
   for (m in c("isotonic", "quantile"))

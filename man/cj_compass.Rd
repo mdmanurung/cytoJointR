@@ -14,6 +14,9 @@ cj_compass(
   calibrate_seed = 1L,
   pseudo_reps = 3L,
   donor_switch = TRUE,
+  n_runs = 1L,
+  diagnostics = FALSE,
+  rhat_max = Inf,
   ...
 )
 }
@@ -49,6 +52,18 @@ state is left as it was.}
 donors (pseudo AUC below 0.7, with at least 5 pseudo donors with a paired call) to the same-visit
 \code{"population"} control. See \emph{Calibrated calls}.}
 
+\item{n_runs}{Number of COMPASS fits per run group, with seeds \code{seed},
+\code{seed + 1}, ... (\code{seed} defaults to COMPASS's 100). The first fit is the
+one reported in \code{fits} and in the score columns, so \code{n_runs = 1} is the old
+behaviour. With \code{n_runs > 1} the extra fits feed the convergence columns
+described in \emph{Convergence diagnostics} and are then dropped.}
+
+\item{diagnostics}{\code{TRUE} is \code{n_runs = max(n_runs, 5)}. Five, because an odd number
+of runs never ties on the call.}
+
+\item{rhat_max}{A donor is also \code{unstable_call} when its largest R-hat exceeds
+this. \code{Inf} (default) never flags on R-hat; the usual limit is 1.05.}
+
 \item{...}{Passed to \code{COMPASS::SimpleCOMPASS()}, e.g. \code{iterations},
 \code{replications}, \code{seed}. COMPASS's defaults apply when omitted.}
 }
@@ -56,9 +71,13 @@ donors (pseudo AUC below 0.7, with at least 5 pseudo donors with a paired call) 
 A \code{cj_compass} list with \code{fits} (named list of \code{COMPASSResult}),
 \code{scores} (tidy table with \code{compass_FS}, \code{compass_PFS},
 \code{compass_response_degree1}, \code{compass_response_degree2}, \code{control_source},
-\code{control_fallback}, \code{control_shift_check}), \code{groups} (one
+\code{control_fallback}, \code{control_shift_check}, and with \code{n_runs > 1} the
+convergence columns), \code{groups} (one
 row per COMPASS run with its status), \code{filters} (what the category filter
-removed per run) and \code{excluded} (contrasts left out, with the reason).
+removed per run), \code{excluded} (contrasts left out, with the reason) and
+\code{diagnostics} (\code{NULL}, or with \code{n_runs > 1} a list: \code{n_runs}, \code{seeds},
+\code{summary}). A run group whose extra runs fail keeps its fit and scores, has
+\code{NA} convergence columns, and says so in \code{groups$status}.
 }
 \description{
 Runs one \code{COMPASS::SimpleCOMPASS()} per stimulation, visit and parent
@@ -182,6 +201,65 @@ effect, where power falls to the population level (0.45 to 0.8). A run is switch
 fewer than 5 pseudo donors with a paired call, is not repaired (the pseudo-AUC warning still applies). Cost: about \code{pseudo_reps * max_pseudo / 5 + 1} COMPASS fits per run with
 non-paired rows, 12 to 14 times the plain call with the defaults, plus a second set for switched
 runs. Numbers: \code{docs/adr/0003-compass-missing-control.md}.
+}
+
+\section{Convergence diagnostics}{
+
+COMPASS's \code{replications} are not independent chains. They are extra passes of
+one Gibbs chain, thinned by \code{replications}, and the model runs one chain per
+call. \code{n_runs > 1} therefore refits with different seeds and treats the fits
+as chains. For each donor, from the per-iteration subset indicators \code{gamma}:
+\itemize{
+\item \code{compass_gamma_rhat}, \code{compass_gamma_ess}: rank-normalised R-hat and bulk
+ESS (\code{\link[posterior:rhat]{posterior::rhat()}}, \code{\link[posterior:ess_bulk]{posterior::ess_bulk()}}) of the mean of \code{gamma}
+over the non-null subsets;
+\item \code{compass_FS_rhat}, \code{compass_FS_ess}, \code{compass_PFS_rhat}, \code{compass_PFS_ess}:
+the same for COMPASS's FS and PFS formulas applied to each iteration;
+\item \code{compass_runs_called}: runs in which the donor's call (max over subsets of
+mean \code{gamma} > 0.5) is positive, and \code{compass_max_gamma_mean}, the mean over
+runs of that maximum (\code{compass_max_gamma} is that of run 1 only, the reported fit);
+\item \code{compass_call_raw} (the reported raw call, that of the first run; also
+\code{compass_call} unless \code{missing_control_calibrate} replaces it by the calibrated
+call) and \code{compass_call_unsupported}: \code{TRUE} when at most half of the runs make the
+reported call, so the reported call is probably the odd one out;
+\item \code{unstable_call}: \code{TRUE} when the runs disagree on the call (some, not all,
+are positive; \code{compass_call_disagree}), or when the largest of the three
+R-hats exceeds \code{rhat_max} (\code{compass_rhat_high}).
+}
+
+Which flag to read (simulation: 40 donors, 4 markers, 12 data sets with weak
+effects, 10x-iterations reference from 4 seeds; 18 of 480 donors had a
+reported call that differed from the reference at COMPASS's default
+iterations):
+\itemize{
+\item \code{unstable_call} finds the donors whose call is not reproducible. It caught
+18 of 18 wrong reported calls, but 52 donors were flagged: in most of them
+the reported call happened to be the right one (precision 0.35).
+\item \code{compass_call_unsupported} with 5 runs flagged 19 donors, 18 of them wrong
+(recall 1.0, precision 0.95). Use it to decide which calls to recheck. With
+4 runs a 2-2 tie counts as unsupported and the precision falls to 0.50, so
+\code{diagnostics = TRUE} uses 5.
+\item With only 1000 iterations (0.1x the default) \code{compass_call_unsupported}
+found 62\% of the wrong calls (precision 0.68) and \code{unstable_call} 95\%
+(precision 0.47): run more iterations first.
+}
+
+\code{rhat_max} is \code{Inf} by default, so R-hat is reported but does not flag. At the
+default iterations an R-hat above 1.05 flagged 27\% of donors (44\% of the
+RV144 dev donors) and found no wrong call that run disagreement had missed.
+R-hat of 0/1 draws stays high for donors whose call is stable. Use
+\code{rhat_max = 1.05} for the stricter check.
+
+With \code{missing_control_calibrate = TRUE} the calibration uses run 1 only: the pseudo-missing
+refits are single runs, and \code{compass_call_unsupported} and \code{compass_call_disagree} describe the
+raw call of run 1, not the calibrated \code{compass_call}.
+
+\code{diagnostics$summary} counts the flagged donors per run group and gives the
+worst R-hat, the lowest ESS and the seconds the group took. The cost is about
+\code{n_runs} times that of one fit. An R-hat of 1 with an ESS of \code{NA} means every
+run sat on one value. The thresholds are fixed a priori (1.05, 0.5), not tuned.
+A flagged donor needs more \code{iterations} (or a closer look); an unflagged donor
+only shows that these runs agree.
 }
 
 \examples{

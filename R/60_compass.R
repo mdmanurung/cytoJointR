@@ -102,16 +102,17 @@ compass_prepare_group <- function(cg, x, ord, nm, null_col, category_filter) {
   list(n_s = n_s, n_u = n_u, n_u_raw = n_u_raw, del = del)
 }
 
-# SimpleCOMPASS() on a prepared group; a COMPASSResult or the error message.
-compass_run_group <- function(prep, cg, verbose, ...) {
+# SimpleCOMPASS() on a prepared group; a COMPASSResult or the error message. `seed` is COMPASS's
+# default (100); extra diagnostic runs skip the posterior that only the reported fit needs.
+compass_run_group <- function(prep, cg, verbose, seed = 100L, posterior = TRUE, ...) {
   meta <- data.frame(donor_id = cg$donor_id, stimulation = cg$stimulation,
                      visit = cg$visit, parent_population = cg$parent_population,
                      control_source = cg$control_source)
   # SimpleCOMPASS() skips the posterior that PosteriorDiff() and friends read;
   # COMPASS() computes it with the same unexported helper.
   run <- function() {
-    f <- COMPASS::SimpleCOMPASS(prep$n_s, prep$n_u, meta, "donor_id", ...)
-    f$fit$posterior <- utils::getFromNamespace("compute_posterior", "COMPASS")(f)
+    f <- COMPASS::SimpleCOMPASS(prep$n_s, prep$n_u, meta, "donor_id", seed = seed, ...)
+    if (posterior) f$fit$posterior <- utils::getFromNamespace("compute_posterior", "COMPASS")(f)
     f
   }
   tryCatch({
@@ -237,6 +238,59 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' non-paired rows, 12 to 14 times the plain call with the defaults, plus a second set for switched
 #' runs. Numbers: `docs/adr/0003-compass-missing-control.md`.
 #'
+#' @section Convergence diagnostics:
+#' COMPASS's `replications` are not independent chains. They are extra passes of
+#' one Gibbs chain, thinned by `replications`, and the model runs one chain per
+#' call. `n_runs > 1` therefore refits with different seeds and treats the fits
+#' as chains. For each donor, from the per-iteration subset indicators `gamma`:
+#' * `compass_gamma_rhat`, `compass_gamma_ess`: rank-normalised R-hat and bulk
+#'   ESS ([posterior::rhat()], [posterior::ess_bulk()]) of the mean of `gamma`
+#'   over the non-null subsets;
+#' * `compass_FS_rhat`, `compass_FS_ess`, `compass_PFS_rhat`, `compass_PFS_ess`:
+#'   the same for COMPASS's FS and PFS formulas applied to each iteration;
+#' * `compass_runs_called`: runs in which the donor's call (max over subsets of
+#'   mean `gamma` > 0.5) is positive, and `compass_max_gamma_mean`, the mean over
+#'   runs of that maximum (`compass_max_gamma` is that of run 1 only, the reported fit);
+#' * `compass_call_raw` (the reported raw call, that of the first run; also
+#'   `compass_call` unless `missing_control_calibrate` replaces it by the calibrated
+#'   call) and `compass_call_unsupported`: `TRUE` when at most half of the runs make the
+#'   reported call, so the reported call is probably the odd one out;
+#' * `unstable_call`: `TRUE` when the runs disagree on the call (some, not all,
+#'   are positive; `compass_call_disagree`), or when the largest of the three
+#'   R-hats exceeds `rhat_max` (`compass_rhat_high`).
+#'
+#' Which flag to read (simulation: 40 donors, 4 markers, 12 data sets with weak
+#' effects, 10x-iterations reference from 4 seeds; 18 of 480 donors had a
+#' reported call that differed from the reference at COMPASS's default
+#' iterations):
+#' * `unstable_call` finds the donors whose call is not reproducible. It caught
+#'   18 of 18 wrong reported calls, but 52 donors were flagged: in most of them
+#'   the reported call happened to be the right one (precision 0.35).
+#' * `compass_call_unsupported` with 5 runs flagged 19 donors, 18 of them wrong
+#'   (recall 1.0, precision 0.95). Use it to decide which calls to recheck. With
+#'   4 runs a 2-2 tie counts as unsupported and the precision falls to 0.50, so
+#'   `diagnostics = TRUE` uses 5.
+#' * With only 1000 iterations (0.1x the default) `compass_call_unsupported`
+#'   found 62% of the wrong calls (precision 0.68) and `unstable_call` 95%
+#'   (precision 0.47): run more iterations first.
+#'
+#' `rhat_max` is `Inf` by default, so R-hat is reported but does not flag. At the
+#' default iterations an R-hat above 1.05 flagged 27% of donors (44% of the
+#' RV144 dev donors) and found no wrong call that run disagreement had missed.
+#' R-hat of 0/1 draws stays high for donors whose call is stable. Use
+#' `rhat_max = 1.05` for the stricter check.
+#'
+#' With `missing_control_calibrate = TRUE` the calibration uses run 1 only: the pseudo-missing
+#' refits are single runs, and `compass_call_unsupported` and `compass_call_disagree` describe the
+#' raw call of run 1, not the calibrated `compass_call`.
+#'
+#' `diagnostics$summary` counts the flagged donors per run group and gives the
+#' worst R-hat, the lowest ESS and the seconds the group took. The cost is about
+#' `n_runs` times that of one fit. An R-hat of 1 with an ESS of `NA` means every
+#' run sat on one value. The thresholds are fixed a priori (1.05, 0.5), not tuned.
+#' A flagged donor needs more `iterations` (or a closer look); an unflagged donor
+#' only shows that these runs agree.
+#'
 #' @param x A `cj_data` (or a `cj_fit`, whose `data` is used).
 #' @param category_filter COMPASS category filter; the default is COMPASS's own.
 #' @param verbose Show COMPASS's console output.
@@ -259,14 +313,27 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' @param calibrate_seed Seed for choosing the pseudo-removed donors; repeat `r` uses
 #'   `calibrate_seed + r - 1`, so adjacent seeds share partitions. The caller's RNG
 #'   state is left as it was.
+#' @param n_runs Number of COMPASS fits per run group, with seeds `seed`,
+#'   `seed + 1`, ... (`seed` defaults to COMPASS's 100). The first fit is the
+#'   one reported in `fits` and in the score columns, so `n_runs = 1` is the old
+#'   behaviour. With `n_runs > 1` the extra fits feed the convergence columns
+#'   described in *Convergence diagnostics* and are then dropped.
+#' @param diagnostics `TRUE` is `n_runs = max(n_runs, 5)`. Five, because an odd number
+#'   of runs never ties on the call.
+#' @param rhat_max A donor is also `unstable_call` when its largest R-hat exceeds
+#'   this. `Inf` (default) never flags on R-hat; the usual limit is 1.05.
 #' @param ... Passed to `COMPASS::SimpleCOMPASS()`, e.g. `iterations`,
 #'   `replications`, `seed`. COMPASS's defaults apply when omitted.
 #' @return A `cj_compass` list with `fits` (named list of `COMPASSResult`),
 #'   `scores` (tidy table with `compass_FS`, `compass_PFS`,
 #'   `compass_response_degree1`, `compass_response_degree2`, `control_source`,
-#'   `control_fallback`, `control_shift_check`), `groups` (one
+#'   `control_fallback`, `control_shift_check`, and with `n_runs > 1` the
+#'   convergence columns), `groups` (one
 #'   row per COMPASS run with its status), `filters` (what the category filter
-#'   removed per run) and `excluded` (contrasts left out, with the reason).
+#'   removed per run), `excluded` (contrasts left out, with the reason) and
+#'   `diagnostics` (`NULL`, or with `n_runs > 1` a list: `n_runs`, `seeds`,
+#'   `summary`). A run group whose extra runs fail keeps its fit and scores, has
+#'   `NA` convergence columns, and says so in `groups$status`.
 #' @export
 #' @examplesIf requireNamespace("COMPASS", quietly = TRUE)
 #' \donttest{
@@ -282,7 +349,8 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' }
 cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FALSE,
                        missing_control = c("drop", "donor", "population"),
-                       missing_control_calibrate = FALSE, max_pseudo = 20L, calibrate_seed = 1L, pseudo_reps = 3L, donor_switch = TRUE, ...) {
+                       missing_control_calibrate = FALSE, max_pseudo = 20L, calibrate_seed = 1L, pseudo_reps = 3L,
+                       donor_switch = TRUE, n_runs = 1L, diagnostics = FALSE, rhat_max = Inf, ...) {
   compass_require()
   # SimpleCOMPASS() calls set.seed(): give the caller's RNG state back on exit.
   had_seed <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
@@ -304,6 +372,10 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
         stop(a, " must be a single finite whole number of at least 1", call. = FALSE)
     }
   }
+  n_runs <- compass_n_runs(n_runs, diagnostics)
+  dots <- list(...)
+  seed0 <- if (is.null(dots[["seed"]])) 100L else dots[["seed"]] # COMPASS's default seed
+  dots[["seed"]] <- NULL
   if (inherits(x, "cj_fit")) x <- x$data
   if (!inherits(x, "cj_data")) stop("x must be a cj_data or cj_fit", call. = FALSE)
   if (grepl("[&!+*?()\\[\\]{}|^$\\\\]", paste(x$markers, collapse = ""), perl = TRUE))
@@ -340,7 +412,8 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
   nm <- compass_pattern_names(x$bits)[ord]
   null_col <- length(nm)
   gid <- paste(ct$stimulation, ct$visit, ct$parent_population, sep = " | ")
-  fits <- list(); groups <- list(); filters <- list(); tidy <- list()
+  fits <- list(); groups <- list(); filters <- list(); tidy <- list(); diag <- list()
+  seconds <- c()
   for (g in unique(gid)) {
     cg <- ct[gid == g, ]
     cg <- cg[order(cg$donor_id), ]
@@ -354,12 +427,27 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
                           cells_moved_control = sum(n_u_raw[, del]),
                           n_zero_control = sum(is.na(cg$control_sample_id)),
                           row.names = NULL)
-    fit <- compass_run_group(prep, cg, verbose, ...)
+    run <- function(seed = seed0, posterior = TRUE)
+      do.call(compass_run_group, c(list(prep, cg, verbose, seed = seed, posterior = posterior), dots))
+    t0 <- Sys.time()
+    fit <- run()
     ok <- !is.character(fit)
     groups[[g]] <- cbind(group = g, key, n_donors = nrow(cg),
                          status = if (ok) "fitted" else paste("failed:", fit), row.names = NULL)
     if (!ok) next
     fits[[g]] <- fit
+    if (n_runs > 1L) {
+      # Same data and settings, different seeds; the first run is the one reported above.
+      more <- lapply(seed0 + seq_len(n_runs - 1L), function(sd) run(sd, posterior = FALSE))
+      failed <- Filter(is.character, more)
+      if (length(failed)) {
+        # The fit and its scores stand; only the convergence columns are missing for this group.
+        groups[[g]]$status <- paste0("fitted (extra runs failed: ", failed[[1L]], ")")
+      } else {
+        diag[[g]] <- cbind(group = g, compass_run_diagnostics(c(list(fit), more), rhat_max))
+        seconds[g] <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
+      }
+    }
     # Response() returns a one-column matrix (rows = donors), so index its column
     # by donor; indexing the matrix itself by name gives NA.
     resp <- function(deg) if (length(x$markers) >= deg)
@@ -375,9 +463,25 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
       control_source = cg$control_source, control_fallback = cg$control_fallback,
       control_shift_check = cg$control_shift_check,
       compass_max_gamma = unname(compass_max_gamma(fit)[cg$donor_id]))
+    # One compass_max_gamma: run 1's, the reported fit. Diagnostics add the mean over runs as
+    # compass_max_gamma_mean; their other columns are new.
+    if (!is.null(diag[[g]]))
+      tidy[[g]] <- cbind(tidy[[g]], diag[[g]][match(cg$donor_id, diag[[g]]$donor_id),
+                                              setdiff(names(diag[[g]]), c("group", "donor_id", names(tidy[[g]])))],
+                         row.names = NULL)
   }
   bind <- function(l) if (length(l)) do.call(rbind, unname(l))
+  # A group whose extra runs failed has no convergence columns: pad them with NA.
+  cols <- unique(unlist(lapply(tidy, names)))
+  tidy <- lapply(tidy, function(t) {
+    t[setdiff(cols, names(t))] <- NA
+    t[cols]
+  })
   scores <- bind(tidy)
+  diagnostics_out <- NULL
+  if (length(diag))
+    diagnostics_out <- list(n_runs = n_runs, seeds = seed0 + seq_len(n_runs) - 1L,
+                            summary = compass_diagnostics_summary(bind(diag), seconds, n_runs))
   calibration <- NULL
   if (!is.na(cal_method) && !is.null(scores)) {
     pseudo <- if (n_alt) compass_pseudo_fits(x, ct, fits, gid, ord, nm, null_col, category_filter, verbose,
@@ -436,7 +540,7 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
               "$calibration$table", call. = FALSE)
   }
   structure(list(fits = fits, scores = scores, groups = bind(groups), calibration = calibration,
-                 filters = bind(filters), excluded = excluded,
+                 filters = bind(filters), excluded = excluded, diagnostics = diagnostics_out,
                  note = paste("COMPASS FS, PFS and response probabilities are COMPASS",
                               "quantities, not cytoJointR sign probabilities.")),
             class = "cj_compass")

@@ -22,11 +22,12 @@
   `compass_max_gamma_switch`; the result gains `$calibration` (table, pseudo pairs, failed
   refits, switched runs with their own calibration table). `cj_compass()` now restores the caller's `.Random.seed`, and the
   option is ignored, with a warning, under `missing_control = "drop"`. On a clean held-out
-  simulation (40 donors) the non-paired FPR was within 0.05 of the paired FPR in 12 of 12 cells
-  (largest gap 0.04; raw rule 8 of 12, up to 0.22). Power at a rare, weak effect with `"donor"`
-  falls by 0.02 to 0.09; the TPR bar (loss at most 0.05) held in 10 of 12 cells. A visit shift with `"donor"` is partly repaired by the switch (later-visit
-  FPR 0.05 to 0.21 at the moderate effect, 0.04 to 0.47 at the rare, weak one, from 0.78 to 0.97).
-  Cost is 12 to 15 times the plain call. `docs/adr/0003-compass-missing-control.md` has the numbers.
+  simulation (40 donors, 40 seeds) the non-paired FPR was within 0.05 of the paired FPR in 12 of 12
+  cells (largest gap 0.03; raw rule 8 of 12, up to 0.21). The TPR bar (loss at most 0.05) held in 11 of
+  12 cells; the miss is `"donor"` at a rare, weak effect with 25% missing (-0.08, 95% CI -0.13 to -0.04).
+  A visit shift with `"donor"` is partly repaired by the switch (later-visit
+  FPR 0.05 to 0.16 at the moderate effect, 0.05 to 0.21 at the rare, weak one, from 0.75 to 0.95).
+  Cost is 13 to 16 times the plain call. `docs/adr/0003-compass-missing-control.md` has the numbers.
 
 * `cj_read_fcs()` reads pre-gated FCS files (one per sample) into the `cells` table, applying
   each file's spillover matrix (`compensate = TRUE`); markers are chosen by channel name or

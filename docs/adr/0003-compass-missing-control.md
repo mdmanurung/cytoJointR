@@ -275,3 +275,43 @@ The donor rare, weak TPR now loses at most 0.085 and one of the three cells stil
 by 0.035). The population rare, weak 25% cell is a new miss that the gate does not touch (population rows
 at that rate use the map); its paired TPR is 0.72 and the calibrated 0.63. The visit shift is repaired to
 the same degree as before.
+
+Pooled clean test, seeds 41 to 80 (40 seeds; package output, 40 donors). Seeds 41 to 50 are the test above.
+Seeds 51 to 80 were scored once with the same logic (`9efa021`, which differs from `2742f05` only in
+roxygen text; arrays 25958071-9, access logged in `runs/2026-11-10_u2r4-clean.access.txt`). Nothing was
+tuned on them. Intervals are 95% bootstrap intervals that resample seeds (2000 draws,
+`scripts/82_pooled-clean-ci.R`, output in `runs/2026-11-10_u2r4-clean/pooled_41_80`). A cell is a real
+miss only if the upper limit of the TPR change is below -0.05.
+
+| Cell (option, effect, missing) | FPR gap | 95% CI | TPR change | 95% CI |
+|---|---|---|---|---|
+| donor, moderate, 10% | -0.022 | -0.053 to 0.011 | -0.006 | -0.019 to 0 |
+| donor, moderate, 25% | -0.019 | -0.048 to 0.010 | -0.002 | -0.008 to 0 |
+| donor, moderate, 50% | +0.023 | -0.008 to 0.058 | -0.005 | -0.010 to -0.001 |
+| population, moderate, 10% | +0.013 | -0.020 to 0.049 | -0.008 | -0.020 to 0 |
+| population, moderate, 25% | +0.029 | 0.005 to 0.055 | -0.007 | -0.015 to 0 |
+| population, moderate, 50% | +0.027 | -0.002 to 0.053 | -0.012 | -0.027 to -0.002 |
+| donor, rare, weak, 10% | -0.004 | -0.015 to 0.009 | -0.042 | -0.092 to 0 |
+| donor, rare, weak, 25% | +0.003 | -0.006 to 0.013 | -0.082 | -0.132 to -0.041 |
+| donor, rare, weak, 50% | +0.007 | -0.002 to 0.015 | -0.035 | -0.062 to -0.012 |
+| population, rare, weak, 10% | +0.008 | -0.006 to 0.023 | -0.004 | -0.015 to 0 |
+| population, rare, weak, 25% | +0.014 | 0.001 to 0.030 | -0.023 | -0.049 to -0.003 |
+| population, rare, weak, 50% | +0.014 | 0.005 to 0.024 | -0.011 | -0.024 to 0 |
+
+- FPR bar (gap at most 0.05): 12 of 12 cells. The largest gap is +0.029. No cell has a lower CI limit
+  above 0.05, so there is no real FPR miss. The raw rule passes 8 of 12 (largest gap +0.214).
+- TPR bar (change at least -0.05): 11 of 12 cells. The one miss is "donor", rare, weak, 25% missing
+  (-0.082). Its upper CI limit is -0.041, above -0.05, so it is not a real miss by the rule. Real
+  misses: 0 of 12. The two cells that missed in seeds 41 to 50 alone are at -0.082 and -0.023 here, so
+  the "population" miss was noise.
+- Seeds 51 to 80 alone: FPR bar 12 of 12 (largest gap +0.028), TPR bar 11 of 12 (same cell), worst
+  non-paired AUC change -0.006.
+- Later-visit FPR with the shift (pooled): moderate 0.05, 0.09, 0.16; rare, weak 0.05, 0.07, 0.21 at 10,
+  25, 50% missing, from 0.75 to 0.95. Switched share at the shifted visit: 94% (moderate), 81% (rare,
+  weak).
+- Runtime against the plain call, seeds 51 to 80: 13 to 16 times (medians 232 s one-visit
+  "population", 576 s two-visit "donor", 461 s two-visit "population"; plain 18 to 37 s).
+
+The remaining cost is power at a rare, weak effect with `"donor"` and 25% missing: about 8 points of
+TPR, with the upper CI limit at -4 points. Use a paired design, or `"population"`, when that effect size
+matters.

@@ -52,6 +52,12 @@ test_that("compass_calibrate_scores maps non-paired rows, keeps paired rows, and
   expect_equal(r$scores$calibration, c("paired", "isotonic", "isotonic"))
   expect_equal(r$scores$compass_call, c(TRUE, TRUE, FALSE))
   expect_equal(r$info$n_pseudo, 40)
+  # Calibration only tightens: a raw 0.4 stays uncalled even if the map would lift it.
+  lift <- cytoJointR:::compass_calibrate_scores(cal_scores(0.4, "population"), "g",
+            data.frame(group = "g", cls = "population", gamma_pseudo = c(rep(0.2, 20), rep(0.4, 20)),
+                       gamma_paired = c(rep(0, 20), rep(1, 20))), "isotonic")
+  expect_lte(lift$scores$compass_gamma_cal, 0.4)
+  expect_false(lift$scores$compass_call)
   # Too few pseudo donors, or one side empty: the fallback cut applies.
   few <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 3), ps[1:6, ], "isotonic")
   expect_equal(few$scores$calibration[2:3], c("fallback", "fallback"))

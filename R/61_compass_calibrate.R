@@ -138,6 +138,10 @@ compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha =
                               n_pseudo = nrow(ps), n_pseudo_above = sum(pos),
                               pseudo_auc = auc, method = scores$calibration[rows[1L]])
   }
+  # Calibration only tightens: a non-paired row is never called when the raw rule would not
+  # call it. Dev: this removed the extra false calls that the map added at a rare, weak effect.
+  np <- scores$control_source != "paired"
+  scores$compass_gamma_cal[np] <- pmin(scores$compass_gamma_cal[np], scores$compass_max_gamma[np])
   scores$compass_call <- scores$compass_gamma_cal > COMPASS_CAL_GAMMA
   list(scores = scores, info = if (length(info)) do.call(rbind, unname(info)))
 }

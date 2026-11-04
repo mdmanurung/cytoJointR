@@ -2,17 +2,22 @@
 
 * `cj_compass(missing_control_calibrate = TRUE)` calibrates the call for rows without a
   paired control, without responder labels. Paired donors are pseudo-removed in folds
-  of 5 (`max_pseudo`, default 40), the run is refitted, and an isotonic map of the
-  paired gamma on the pseudo-missing gamma is applied to the non-paired rows. Scores gain
-  `compass_max_gamma` (always, as the last column so positional use is unchanged), and with calibration `compass_gamma_cal`, `compass_call`
-  and `calibration`; the result gains `$calibration`. A run with fewer than 15 paired
-  donors uses a fallback cut (gamma 0.85, from simulation only). In simulation the
-  non-paired FPR was within 0.05 of the paired FPR in 11 of 12 cells on a clean held-out
-  test (largest gap 0.09, `"population"` at 50% missing); `"donor"` at a visit with a
-  shifted background is not repaired and warns. `cj_compass()` now restores the caller's `.Random.seed` (SimpleCOMPASS sets a seed). Failed
-  pseudo refits are counted in `$calibration$n_failed`, and the option is ignored, with a
-  warning, under `missing_control = "drop"`. Cost is 5 to 9 times the plain call.
-  `docs/adr/0003-compass-missing-control.md` has the numbers.
+  of 5 (`max_pseudo` 20 per partition, `pseudo_reps` 3 random partitions pooled), the run
+  is refitted, and an isotonic map of the paired gamma on the pseudo-missing gamma is
+  applied to the non-paired rows (never above the raw gamma). A run with fewer than 15
+  paired donors uses a fallback cut (gamma 0.85, from simulation only). With `"donor"`, a run
+  whose borrowed control cannot rank donors (pseudo AUC below 0.7) is refitted with the
+  same-visit `"population"` control (`donor_switch`, default on) and marked `"switched"`.
+  Scores gain `compass_max_gamma` (always, as the last column so positional use is unchanged),
+  and with calibration `compass_gamma_cal`, `compass_call`, `calibration` and
+  `compass_max_gamma_switch`; the result gains `$calibration` (table, pseudo pairs, failed
+  refits, switched runs). `cj_compass()` now restores the caller's `.Random.seed`, and the
+  option is ignored, with a warning, under `missing_control = "drop"`. On a clean held-out
+  simulation (40 donors) the non-paired FPR was within 0.05 of the paired FPR in 12 of 12 cells
+  (largest gap 0.05; raw rule 9 of 12, up to 0.24). Power at a rare, weak effect with `"donor"`
+  falls by 0.08 to 0.32. A visit shift with `"donor"` is partly repaired by the switch (later-visit
+  FPR 0.05 to 0.21 at the moderate effect, 0.04 to 0.47 at the rare, weak one, from 0.78 to 0.97).
+  Cost is 12 to 14 times the plain call. `docs/adr/0003-compass-missing-control.md` has the numbers.
 
 * `cj_compass(missing_control = c("drop", "donor", "population"))` runs COMPASS on
   stimulated samples that have no control sample. `"drop"` (default) is the old

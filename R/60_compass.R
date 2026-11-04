@@ -224,11 +224,12 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' with the other donors' controls of the same stimulation, visit and parent population, so it
 #' shares the visit effect. Those rows are calibrated with population-rule pseudo fits and
 #' marked `calibration = "switched"`; `compass_max_gamma_switch` holds their gamma. In
-#' simulation this took the later-visit FPR from 0.8 to 0.9 down to 0.05 to 0.07 (power at a rare, weak
-#' effect falls to the population level, about 0.45). Switching is rare without a shift (0 to 2%
-#' of runs). A shifted background that the pseudo AUC cannot detect (few pseudo donors with a call)
-#' stays unrepaired. Cost: about `pseudo_reps * max_pseudo / 5 + 1` COMPASS fits per run with
-#' non-paired rows, 13 times the plain call with the defaults, plus a second set for switched
+#' simulation (clean test, seeds 31 to 40) this took the later-visit FPR from 0.78 to 0.97 down to
+#' 0.05 to 0.07 at 10 and 25% missing and 0.21 at 50% (moderate effect), and to 0.04 to 0.47 at the rare, weak
+#' effect, where power falls to the population level (0.45 to 0.8). A run is switched without a shift in
+#' 0 to 6% of the borrowed rows. Switching is partial: a shift whose pseudo AUC stays above 0.7, or with
+#' fewer than 5 pseudo donors with a paired call, is not repaired (the pseudo-AUC warning still applies). Cost: about `pseudo_reps * max_pseudo / 5 + 1` COMPASS fits per run with
+#' non-paired rows, 12 to 14 times the plain call with the defaults, plus a second set for switched
 #' runs. Numbers: `docs/adr/0003-compass-missing-control.md`.
 #'
 #' @param x A `cj_data` (or a `cj_fit`, whose `data` is used).
@@ -403,8 +404,8 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
     if (n_alt) message("missing_control_calibrate: ", sum(scores$calibration %in% cal_method), " row(s) mapped onto the ",
             "paired scale (", cal_method, "), ", n_fb, " on the fallback cut (too few paired donors); ",
             "use compass_call, not max gamma > 0.5. Calibrated in simulation only (40 donors, 4 markers): ",
-            "non-paired FPR was within 0.05 of the paired FPR in 11 of 12 cells on a clean held-out test (largest gap 0.09), but \"donor\" at a visit with a ",
-            "shifted background is not repaired; see docs/adr/0003-compass-missing-control.md.")
+            "non-paired FPR was within 0.05 of the paired FPR in 12 of 12 cells on a clean held-out test (largest gap 0.05), but \"donor\" at a visit with a ",
+            "shifted background is only partly repaired (switch); see docs/adr/0003-compass-missing-control.md.")
     if (any(low))
       warning("In ", sum(low), " group(s) a pseudo-missing control does not rank donors like the paired ",
               "control (AUC < ", COMPASS_CAL_MIN_AUC, "); calibrated calls there are unreliable, see ",

@@ -10,8 +10,10 @@ cj_compass(
   verbose = FALSE,
   missing_control = c("drop", "donor", "population"),
   missing_control_calibrate = FALSE,
-  max_pseudo = 40L,
+  max_pseudo = 20L,
   calibrate_seed = 1L,
+  pseudo_reps = 3L,
+  donor_switch = TRUE,
   ...
 )
 }
@@ -32,12 +34,19 @@ max mean gamma of the non-paired rows onto the paired scale with a label-free
 empirical null from the same run. See \emph{Calibrated calls}.}
 
 \item{max_pseudo}{Most paired donors per COMPASS run that are pseudo-removed for the
-calibration (default 40). Each 5 donors cost one extra COMPASS fit per run, so the
+calibration in one partition (default 20). Each 5 donors cost one extra COMPASS fit per run, so the
 calibrated call costs about \code{1 + max_pseudo / 5} fits per run with non-paired rows. A
 map needs at least 15 pseudo donors, so a cap below 15 always uses the fallback cut.}
 
 \item{calibrate_seed}{Seed for choosing the pseudo-removed donors. The caller's RNG
 state is left as it was.}
+
+\item{pseudo_reps}{Number of random partitions of the paired donors into pseudo-removal folds
+(default 1). The pseudo points of all repeats are pooled for the map.}
+
+\item{donor_switch}{With \code{"donor"} and calibration, switch a run whose borrowed controls cannot rank
+donors (pseudo AUC below 0.7, with at least 5 pseudo donors with a paired call) to the same-visit
+\code{"population"} control. See \emph{Calibrated calls}.}
 
 \item{...}{Passed to \code{COMPASS::SimpleCOMPASS()}, e.g. \code{iterations},
 \code{replications}, \code{seed}. COMPASS's defaults apply when omitted.}
@@ -127,40 +136,46 @@ gives a warning. See \code{docs/adr/0003-compass-missing-control.md}.
 
 \code{missing_control_calibrate = TRUE} maps the max mean gamma of non-paired rows onto the
 paired scale without responder labels. In each COMPASS run, paired donors are
-pseudo-removed in folds of 5 (at most \code{max_pseudo}, chosen at random), the control is
-resolved by the same \code{missing_control} rule, and the run is refitted. A pseudo donor
-then has two gammas: one with its control missing and one with its own control. An
-isotonic regression of the paired gamma on the pseudo-missing gamma gives the map. It is
-applied to the run's non-paired rows of the same kind (\code{"donor_visit"} or
-\code{"population"}), and a calibrated gamma never exceeds the raw gamma. Use
-\code{compass_call} (calibrated gamma above 0.5), not raw max gamma above 0.5. \code{scores} gets
-\code{compass_max_gamma}, \code{compass_gamma_cal}, \code{compass_call} and \code{calibration}
-(\code{"paired"}, \code{"isotonic"}, \code{"quantile"} or \code{"fallback"}); \verb{$calibration$table} has one
-line per run and kind and \verb{$calibration$pseudo} has the pseudo pairs.
+pseudo-removed in folds of 5 (at most \code{max_pseudo} per partition, chosen at random), the
+control is resolved by the same \code{missing_control} rule, and the run is refitted. A pseudo
+donor then has two gammas: one with its control missing and one with its own control.
+\code{pseudo_reps} random partitions are drawn and their points pooled. An isotonic regression
+of the paired gamma on the pseudo-missing gamma gives the map. It is applied to the run's
+non-paired rows of the same kind (\code{"donor_visit"} or \code{"population"}), and a calibrated
+gamma never exceeds the raw gamma. Use \code{compass_call} (calibrated gamma above 0.5), not
+raw max gamma above 0.5. \code{scores} gets \code{compass_max_gamma}, \code{compass_gamma_cal},
+\code{compass_call}, \code{calibration} (\code{"paired"}, \code{"isotonic"}, \code{"quantile"}, \code{"fallback"} or
+\code{"switched"}) and \code{compass_max_gamma_switch}; \verb{$calibration$table} has one line per run and
+kind (with \code{pseudo_auc}, \code{excess}, \code{switched}), \verb{$calibration$pseudo} has the pseudo pairs,
+\verb{$calibration$n_failed} counts failed refits and \verb{$calibration$switched} lists switched runs.
 
-A map needs at least 15 pseudo donors, so at least 15 paired donors in the run (with a
-usable borrowed control for \code{"donor"}), and at least 3 pseudo donors with a paired
-gamma above 0.5 and 3 not above it. Otherwise the run uses a fallback cut: raw gamma
-0.85 is sent to 0.5. That cut comes from simulation only (the cut at which non-paired
-FPR met paired FPR on the dev seeds of \verb{runs/2026-11-07_compass-missing-control/});
-it depends on that design, and it costs power at a rare, weak effect. The assumption
-is that the pseudo-missing donors resemble the truly missing ones (controls missing
-at random) and that the pseudo gamma ranks donors like the paired gamma. The second is
-checked: when the AUC of pseudo-missing gamma for the paired call is below 0.8, a
-warning says the calibrated calls there are unreliable.
+A map needs at least 15 distinct pseudo donors, so at least 15 paired donors in the run
+(with a usable borrowed control for \code{"donor"}), and at least 3 pseudo donors with a paired
+gamma above 0.5 and 3 not above it. Otherwise the run uses a fallback cut: raw gamma 0.85 is
+sent to 0.5. That cut comes from simulation only (the cut at which non-paired FPR met paired
+FPR on the dev seeds of \verb{runs/2026-11-07_compass-missing-control/}); it depends on that
+design, and it costs power at a rare, weak effect. The assumption is that the pseudo-missing
+donors resemble the truly missing ones (controls missing at random) and that the pseudo
+gamma ranks donors like the paired gamma. The second is checked: when the AUC of
+pseudo-missing gamma for the paired call is below 0.8, a warning says the calibrated calls
+there are unreliable.
 
-\strong{Limit: a visit effect with \code{"donor"}.} If the background differs between visits,
-calibration does not repair the false-positive rate at the visit whose control was
-borrowed from another visit (simulation: FPR 0.33 to 0.95 after calibration at the
-later visit, where the paired FPR is about 0.07). \code{control_shift_check} cannot warn
-about it when a donor has only one other control: with two visits it is always
-\code{"untestable"}, for every borrowed row, shifted or not. The detector to watch is the
-pseudo-AUC warning (\verb{$calibration$table$pseudo_auc} below 0.8): it fired in every
-simulated run with the shift and in none of the moderate-effect runs without it. At a
-rare, weak effect it also fires in about 10 to 18\% of runs without a shift. Where it
-fires, rank donors only and do not use \code{compass_call}. Cost: about \code{1 + max_pseudo / 5} COMPASS fits per run with non-paired rows
-(5 to 9 times the plain call in the simulation). Numbers:
-\code{docs/adr/0003-compass-missing-control.md}.
+\strong{Visit effect with \code{"donor"}.} If the background differs between visits, a control
+borrowed from another visit is biased and no map repairs it. \code{control_shift_check} cannot
+tell: with two visits it is always \code{"untestable"}, for every borrowed row. The detector is
+the pseudo AUC. With \code{donor_switch = TRUE} (default), a \code{"donor"} run whose pseudo AUC is
+below 0.7, with at least 5 pseudo donors with a paired call, is refitted with the
+same-visit \code{"population"} control. That control is an all-zero row, which COMPASS compares
+with the other donors' controls of the same stimulation, visit and parent population, so it
+shares the visit effect. Those rows are calibrated with population-rule pseudo fits and
+marked \code{calibration = "switched"}; \code{compass_max_gamma_switch} holds their gamma. In
+simulation (clean test, seeds 31 to 40) this took the later-visit FPR from 0.78 to 0.97 down to
+0.05 to 0.07 at 10 and 25\% missing and 0.21 at 50\% (moderate effect), and to 0.04 to 0.47 at the rare, weak
+effect, where power falls to the population level (0.45 to 0.8). A run is switched without a shift in
+0 to 6\% of the borrowed rows. Switching is partial: a shift whose pseudo AUC stays above 0.7, or with
+fewer than 5 pseudo donors with a paired call, is not repaired (the pseudo-AUC warning still applies). Cost: about \code{pseudo_reps * max_pseudo / 5 + 1} COMPASS fits per run with
+non-paired rows, 12 to 14 times the plain call with the defaults, plus a second set for switched
+runs. Numbers: \code{docs/adr/0003-compass-missing-control.md}.
 }
 
 \examples{

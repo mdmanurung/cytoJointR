@@ -159,3 +159,55 @@ were used twice and informed the tighten-only rule, so they are no longer a clea
   runs without a shift (14 to 23% at the rare, weak effect without a shift).
 So the claim is: calibration brings non-paired FPR to within 0.05 of paired in most cells, not
 all, at 40 donors with about 20 or more paired donors per run.
+
+## Round 2 (2026-11-09): repeats, the visit-shift switch, and a clean test
+
+Three gaps were left after the first clean test (seeds 21 to 30): one FPR miss at "population",
+moderate effect, 50% missing; TPR loss for "donor" at a rare, weak effect; and a visit effect with
+"donor". Development used dev seeds 1 to 10 only (`runs/2026-11-09_u2r2-dev`); seeds 31 to 40
+were scored once with the frozen code (`ff6f589`, `runs/2026-11-09_u2r2-clean`).
+
+Kept:
+- Pooling `pseudo_reps = 3` random fold partitions (`max_pseudo` 20 each). The map is smoother and
+  the seed-to-seed spread of the FPR gap shrinks (population, moderate: SD 0.123 to 0.066, 0.100
+  to 0.077, 0.101 to 0.080 at 10, 25, 50% missing; worst-seed gap 0.41 to 0.11, 0.38 to 0.16, 0.27
+  to 0.23). The dev mean in the cell that failed on seeds 21 to 30 was already near zero, so the
+  gain shows as spread, not as the mean. The 15-donor minimum counts distinct donors, not points.
+- The switch: a "donor" run whose pseudo AUC is below 0.7 (with at least 5 pseudo donors with a
+  paired call) is refitted with the same-visit "population" control. COMPASS compares an all-zero
+  control row with the other donors' controls of the same stimulation, visit and parent
+  population, so the control shares the visit effect. Those rows are calibrated with
+  population-rule pseudo fits. Both thresholds were set on dev to cut false switches (AUC 0.8 and
+  3 donors switched 10 to 27% of rare, weak runs without a shift; 0.7 and 5 donors: 0 to 2%).
+- Calibration arguments are now passed by name. A user `seed` had shadowed `calibrate_seed`, so
+  partitions followed the COMPASS seed; this changes no fitted gamma, only which donors are
+  pseudo-removed.
+
+Tried and not kept (dev): a bootstrap lower band on the map (FPR 12 of 12 but TPR 6 of 12);
+pooling pseudo points across visits (FPR 12 of 12, TPR 6 of 12, and it hides the shift the switch
+needs; pooling across stimulations cannot be tested because the simulation has one); the
+population map or pooled maps for "donor" runs with few pseudo donors, a lower minimum and a
+null-quantile branch (no change in either bar); a no-excess gate (one more TPR cell, but the
+worst-seed gap came back, 0.38 against 0.16). The donor rare, weak power loss is the cost of
+a borrowed control, not of the fallback cut.
+
+Clean test, seeds 31 to 40 (40 donors; package output), next to seeds 21 to 30:
+
+| Measure | Seeds 21-30 (round 1) | Seeds 31-40 (round 2) |
+|---|---|---|
+| FPR bar, cells passing (non-paired <= paired + 0.05) | 11 of 12 | 12 of 12 |
+| Largest FPR gap | +0.086 ("population", moderate, 50%) | +0.049 ("population", rare, weak, 10%) |
+| Raw rule, cells passing | 6 of 12 | 9 of 12 (largest gap +0.236) |
+| TPR bar, cells passing (loss <= 0.05) | 9 of 12 | 9 of 12 |
+| Worst TPR loss | -0.24 ("donor", rare, weak, 50%) | -0.32 (same cell) |
+| Worst AUC change | -0.004 | -0.021 |
+| Later-visit FPR, "donor" with a visit effect, moderate | 0.52 to 0.91 | 0.05, 0.07, 0.21 at 10, 25, 50% missing (raw 0.84 to 0.97) |
+| Later-visit FPR, rare, weak | 0.55 to 0.72 | 0.47, 0.04, 0.25 (raw 0.78 to 0.94) |
+| Runtime against the plain call | 5 to 9 times | 12 to 14 times |
+
+The three TPR failures are "donor" at the rare, weak effect (paired TPR 0.51 to 0.66; calibrated
+0.23 to 0.54): a borrowed control is a noisier reference, and the map takes it to the paired
+scale. The switch repairs most shifted runs but not all: 92% (moderate) and 71% (rare, weak)
+of the later-visit borrowed rows were switched; the rest keep a high FPR, and the pseudo-AUC
+warning still applies to them. Without a shift 0% (moderate) and 0 to 6% (rare, weak) of rows
+were switched. A switched row has the power of a "population" row (rare, weak TPR 0.45 to 0.81).

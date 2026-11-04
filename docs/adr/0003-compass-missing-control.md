@@ -1,6 +1,6 @@
 # 0003. COMPASS without a control sample runs in the adapter
 
-Date: 2026-11-03. Status: accepted.
+Date: 2026-11-03, calibration added 2026-11-08. Status: accepted.
 
 ## Context
 
@@ -62,3 +62,256 @@ last two.
 
 Rejected: forking COMPASS; imputing a control from the population mean counts
 (it invents data and gives the donor control a fake precision).
+
+## Calibration of non-paired calls (2026-11-08)
+
+`cj_compass(missing_control_calibrate = TRUE)` addresses the liberal call: the
+`gamma > 0.5` rule gave FPR 0.19 to 0.39 (`"population"`) among non-paired rows against
+0.05 to 0.10 for paired rows.
+
+Method (label-free). In each COMPASS run, paired donors are pseudo-removed in folds
+of 5, up to `max_pseudo` (default 40), and the run is refitted with the same
+`missing_control` rule. A pseudo donor has a gamma with its control missing and a gamma
+with its own control. Isotonic regression of the paired gamma on the pseudo-missing
+gamma maps the non-paired rows, per run and per kind of control (borrowed or
+population). The calibrated gamma never exceeds the raw gamma. A pseudo fit has its pseudo-removed donors
+plus the truly missing ones with no control, so the pseudo fit sees a higher missing fraction
+than the real fit (by up to 5 donors per fold); its gamma is slightly more liberal than the
+real missing-control gamma would be, which biases the map toward being too lenient at high
+missing rates. The warning on a poor pseudo AUC applies only to runs that used the map. The call is
+`compass_call` (calibrated gamma > 0.5). No responder labels are used.
+
+Choices and why (simulation of the 2026-11-07 design, 4 markers, 50% responders;
+dev seeds 1 to 10, held-out seeds 11 to 20; `runs/2026-11-08_u2-compass-calibrate*`):
+
+- Isotonic beat the quantile map (quantile max FPR gap +0.20 to +0.21 on dev, isotonic
+  +0.03 to +0.07). An empirical-null cut (95th percentile of the pseudo-missing gamma of
+  paired non-calls) did no better than isotonic.
+- A bigger pseudo set helps: `"population"` max FPR gap over paired +0.107 with 10
+  pseudo donors, +0.065 with 20, +0.010 with 40. Default 40.
+- Minimum: 15 paired donors per run (at least 3 pseudo donors above and 3 not above
+  gamma 0.5). With 10 to 14 pseudo donors the map gave FPR +0.11 over paired. Below the
+  minimum the run uses the fallback cut: raw gamma 0.85 sent to 0.5 (Option 2). The cut
+  is the point where mean non-paired minus paired FPR crossed zero on dev seeds 1 to 10
+  of the 2026-11-07 run. It depends on that simulation design. It is safe on FPR and
+  costs power at a rare, weak effect.
+- Tightening only (calibrated call never above the raw call) removed the extra false
+  calls that the map added at a rare, weak effect (held-out FPR gap +0.056 became
+  +0.036 at worst).
+
+Held-out result (seeds 11 to 20, frozen candidate, 40 donors; non-paired against paired
+rows of the same fit):
+
+| Setting | FPR raw | FPR calibrated | FPR paired |
+|---|---|---|---|
+| `"population"`, moderate | 0.21 to 0.24 | 0.06 to 0.09 | 0.07 |
+| `"donor"`, moderate, stable background | 0.05 to 0.14 | 0.03 to 0.05 | 0.07 |
+| rare, weak (both) | 0.02 to 0.06 | 0.01 to 0.06 | 0.005 to 0.02 |
+
+Card bars: non-paired FPR within paired + 0.05 held in 12 of 12 cells (largest gap
++0.037); non-paired AUC fell at most 0.008. Non-paired TPR fell by at most 0.05 in
+8 of 12 cells. The failures are `"donor"` at the rare, weak effect (TPR -0.06, -0.08,
+-0.19 at 10, 25, 50% missing: with half the controls missing, fewer than 15 paired
+donors have a usable borrowed control, so the run uses the fallback cut) and
+`"population"` moderate at 10% missing (-0.05, from 1.00 to 0.95).
+
+Where it does not hold, in plain terms. With `"donor"` and a visit effect, calibration
+does not repair the false-positive rate at the visit whose control is borrowed. With two
+visits `control_shift_check` returns `"untestable"` for every borrowed row, so it cannot
+tell a shifted from an unshifted background. The detector to watch is the pseudo-AUC
+warning (`$calibration$table$pseudo_auc` below 0.8). Details: `"donor"` with a visit effect (background x1.5 at visit 2): the
+later visit keeps FPR 0.33 to 0.95 after calibration (0.82 to 0.95 raw at 10 to 25%
+missing at the moderate effect; 0.57 against 0.93 at 50%). Pseudo-missing gamma cannot
+rank donors there, and the calibration says so: the pseudo AUC is below 0.8 in 100% of
+those runs, and in 0% of the moderate-effect runs without a visit effect. At the rare, weak
+effect the same warning also fires in 10 to 18% of runs without a shift, because few
+paired donors have a call to compare. `control_shift_check` did not help in this design:
+with two visits the donor has one other control, so it is always `"untestable"` (it
+warns for every borrowed row, shifted or not) and never `"differs"`. So the card's
+80% recall holds only in the sense that all rows warn, and the pseudo-AUC warning is the
+usable detector. Controls missing not at random, pattern-specific visit effects and
+more than one stimulation are not simulated.
+
+Cost. 40 donors, 5000 iterations x 4 replications: the plain call takes 19 to 47 s and
+the calibrated call 97 to 394 s (5 to 9 times; held-out median). `max_pseudo` caps
+it: 20 costs about 5 times, 40 about 5 to 9 times.
+
+
+Fallback ablation (dev seeds 1 to 10, before the clean held-out test). Keeping the raw gamma
+for runs with too few pseudo donors, instead of the 0.85 cut, meets the FPR bar in 9 of 12
+cells (largest gap +0.118, `"donor"` moderate) against 12 of 12 (+0.049) with the cut.
+The cut costs power: TPR bar 10 of 12 against 12 of 12. The fallback stays because it earns
+its place on the FPR bar; its constant remains simulation-derived.
+
+Clean held-out test (seeds 21 to 30, scored once, package 1345d2d, same grid and 40 donors,
+`runs/2026-11-08_u2-compass-calibrate-heldout-clean`). The earlier held-out seeds 11 to 20
+were used twice and informed the tighten-only rule, so they are no longer a clean test; this is.
+- FPR bar (non-paired <= paired + 0.05): 11 of 12 cells. The miss is `"population"`,
+  moderate effect, 50% missing: 0.158 against 0.071 paired (+0.086). Seeds 26 and 28 keep
+  almost all raw false calls there, with only about 20 paired donors for the map. Other cells
+  have gaps of -0.017 to +0.017. The raw rule met the bar in 6 of 12 (largest gap +0.285).
+- TPR bar (loss <= 0.05): 9 of 12. The three `"donor"` rare-weak cells fail (-0.07, -0.10,
+  -0.24), through the fallback cut, as before.
+- Non-paired AUC fell at most 0.004.
+- Visit effect with `"donor"`: unchanged. The later visit keeps FPR 0.52 to 0.91 (moderate)
+  and 0.55 to 0.72 (rare, weak). `control_shift_check` was `"untestable"` for every borrowed
+  row, and the pseudo-AUC warning fired in 100% of those later-visit runs against 0% of moderate
+  runs without a shift (14 to 23% at the rare, weak effect without a shift).
+So the claim is: calibration brings non-paired FPR to within 0.05 of paired in most cells, not
+all, at 40 donors with about 20 or more paired donors per run.
+
+## Round 2 (2026-11-09): repeats, the visit-shift switch, and a clean test
+
+Three gaps were left after the first clean test (seeds 21 to 30): one FPR miss at "population",
+moderate effect, 50% missing; TPR loss for "donor" at a rare, weak effect; and a visit effect with
+"donor". Development used dev seeds 1 to 10 only (`runs/2026-11-09_u2r2-dev`); seeds 31 to 40
+were scored once with the frozen code (`ff6f589`, `runs/2026-11-09_u2r2-clean`).
+
+Kept:
+- Pooling `pseudo_reps = 3` random fold partitions (`max_pseudo` 20 each). The map is smoother and
+  the seed-to-seed spread of the FPR gap shrinks (population, moderate: SD 0.123 to 0.066, 0.100
+  to 0.077, 0.101 to 0.080 at 10, 25, 50% missing; worst-seed gap 0.41 to 0.11, 0.38 to 0.16, 0.27
+  to 0.23). The dev mean in the cell that failed on seeds 21 to 30 was already near zero, so the
+  gain shows as spread, not as the mean. The 15-donor minimum counts distinct donors, not points.
+- The switch: a "donor" run whose pseudo AUC is below 0.7 (with at least 5 pseudo donors with a
+  paired call) is refitted with the same-visit "population" control. COMPASS compares an all-zero
+  control row with the other donors' controls of the same stimulation, visit and parent
+  population, so the control shares the visit effect. Those rows are calibrated with
+  population-rule pseudo fits. Both thresholds were set on dev to cut false switches (AUC 0.8 and
+  3 donors switched 10 to 27% of rare, weak runs without a shift; 0.7 and 5 donors: 0 to 2%).
+- Calibration arguments are now passed by name. A user `seed` had shadowed `calibrate_seed`, so
+  partitions followed the COMPASS seed; this changes no fitted gamma, only which donors are
+  pseudo-removed.
+
+Tried and not kept (dev): a bootstrap lower band on the map (FPR 12 of 12 but TPR 6 of 12);
+pooling pseudo points across visits (FPR 12 of 12, TPR 6 of 12, and it hides the shift the switch
+needs; pooling across stimulations cannot be tested because the simulation has one); the
+population map or pooled maps for "donor" runs with few pseudo donors, a lower minimum and a
+null-quantile branch (no change in either bar); a no-excess gate (one more TPR cell, but the
+worst-seed gap came back, 0.38 against 0.16). The donor rare, weak power loss is the cost of
+a borrowed control, not of the fallback cut.
+
+Clean test, seeds 31 to 40 (40 donors; package output), next to seeds 21 to 30:
+
+| Measure | Seeds 21-30 (round 1) | Seeds 31-40 (round 2) |
+|---|---|---|
+| FPR bar, cells passing (non-paired <= paired + 0.05) | 11 of 12 | 12 of 12 |
+| Largest FPR gap | +0.086 ("population", moderate, 50%) | +0.049 ("population", rare, weak, 10%) |
+| Raw rule, cells passing | 6 of 12 | 9 of 12 (largest gap +0.236) |
+| TPR bar, cells passing (loss <= 0.05) | 9 of 12 | 9 of 12 |
+| Worst TPR loss | -0.24 ("donor", rare, weak, 50%) | -0.32 (same cell) |
+| Worst AUC change | -0.004 | -0.021 |
+| Later-visit FPR, "donor" with a visit effect, moderate | 0.52 to 0.91 | 0.05, 0.07, 0.21 at 10, 25, 50% missing (raw 0.84 to 0.97) |
+| Later-visit FPR, rare, weak | 0.55 to 0.72 | 0.47, 0.04, 0.25 (raw 0.78 to 0.94) |
+| Runtime against the plain call | 5 to 9 times | 12 to 14 times |
+
+The three TPR failures are "donor" at the rare, weak effect (paired TPR 0.51 to 0.66; calibrated
+0.23 to 0.54): a borrowed control is a noisier reference, and the map takes it to the paired
+scale. The switch repairs most shifted runs but not all: 92% (moderate) and 71% (rare, weak)
+of the later-visit borrowed rows were switched; the rest keep a high FPR, and the pseudo-AUC
+warning still applies to them. Without a shift 0% (moderate) and 0 to 6% (rare, weak) of rows
+were switched. A switched row has the power of a "population" row (rare, weak TPR 0.45 to 0.81).
+
+Review notes (2026-11-09, after round 2). A switched row is calibrated to the paired scale of the
+switch fit (the group refitted with the population control), while the paired rows of the same
+group keep the gamma of the original donor-rule fit. The two paired scales differ slightly because
+the non-paired rows enter the fit differently. The calibration of each switched group is kept in
+`$calibration$switched` (population pseudo AUC, number of pseudo donors, method, failed refits per
+group) and `cj_compass()` warns when a switched group used the fallback cut or has a pseudo AUC
+below 0.8, and when the switch fit failed (those rows keep the donor-control calibration).
+Adjacent `calibrate_seed` values share partitions (repeat `r` uses `calibrate_seed + r - 1`).
+The pseudo draw sorts paired donors by ID first, so it does not depend on the row order of the
+data. The unused ablation options (bootstrap band, population and pooled maps for short donor
+runs, the no-excess gate, the null-quantile map) were removed from the package; they remain in git
+history (commit d478ef2) and in `scripts/78`.
+
+## Round 3 (2026-11-10): the small-run gate
+
+Gap: the TPR bar in the three "donor" rare, weak cells (-0.08, -0.15, -0.32 on seeds 31 to 40).
+Dev seeds 1 to 10 showed where it sits: fallback rows (runs too small for a map) lost most of the
+power (TPR 0.41 to 0.17 at 50% missing, 0.50 to 0.24 at 25%) while rows calibrated by the map lost
+little (0.85 to 0.79). At 50% missing only about half of the paired donors have the other visit's
+control, so a "donor" run has about 10 usable pseudo donors.
+
+Kept: in a run with at least 6 pseudo donors but too few for a map, keep the raw gamma when the
+pseudo-missing control calls no more of those donors than the paired control does; otherwise the
+fallback cut applies. A rare, weak response shows no such excess (raw FPR 0.00 to 0.03); a moderate one
+does. Dev: TPR bar 8 to 10 of 12, donor rare, weak TPR change -0.04, -0.09, -0.03 (from -0.06, -0.17,
+-0.23), FPR bar 11 of 12 as before (the same donor moderate 25% cell, +0.059 to +0.069). The worst-seed
+gap in donor moderate 50% rose from 0.04 to 0.12 because the gate is noisy with few donors, so the margin
+of those cells is thinner. Minimum 6 donors; 8 and 10 lose the gain. The round-2 gate (on map rows) was
+dropped for the same reason in the opposite place: here there is no map to fall back on.
+
+Tried and not kept (dev):
+- A Neyman-Pearson cut (the (1 - alpha) quantile of the pseudo-missing gamma among paired negatives, never
+  below 0.5; rows above it keep the raw gamma) in place of the fallback: no change. In place of the map:
+  alpha 0.10 gives TPR bar 10 of 12 but FPR bar 10 of 12; 0.05 and 0.02 give TPR 7 and 6. With about 10
+  usable donors the high quantile of the negatives is close to their maximum, as strict as the fallback.
+- Shrinking the borrowed control toward the same-visit population control with an empirical-Bayes weight
+  (between-donor against visit-to-visit variance, `scripts/81`): the weight is 1 without a visit effect
+  and 0 with a 1.5-fold shift, so it is either a no-op or the switch itself. It cannot raise TPR in the
+  unshifted cells. As a second switch trigger for shifts the pseudo AUC misses it is untested.
+- Pooling the donor-visit pseudo points of all visits for the map: no gain (about 20 pairs with 3 to 5
+  donors with a paired call).
+
+Clean test, seeds 41 to 50 (package output, 40 donors, scored once with `2742f05`,
+`runs/2026-11-10_u2r3-clean`), next to seeds 31 to 40:
+
+| Measure | Seeds 31-40 | Seeds 41-50 |
+|---|---|---|
+| FPR bar, cells passing | 12 of 12 | 12 of 12 |
+| Largest FPR gap | +0.049 | +0.043 ("population", moderate, 50%) |
+| Raw rule, cells passing | 9 of 12 | 8 of 12 (largest gap +0.215) |
+| TPR bar, cells passing | 9 of 12 | 10 of 12 |
+| "donor" rare, weak TPR change at 10, 25, 50% | -0.08, -0.15, -0.32 | -0.02, -0.085, -0.03 |
+| Other TPR failure | none | "population" rare, weak 25%: -0.075 |
+| Worst non-paired AUC change | -0.021 | -0.017 |
+| Later-visit FPR, moderate | 0.05, 0.07, 0.21 | 0.08, 0.09, 0.24 |
+| Later-visit FPR, rare, weak | 0.47, 0.04, 0.25 | 0.05, 0.10, 0.30 |
+| Switched share at the shifted visit | 92% / 71% | 87% / 77% |
+| Runtime against the plain call | 12 to 14 times | 12 to 15 times |
+
+The donor rare, weak TPR now loses at most 0.085 and one of the three cells still misses the bar (25%,
+by 0.035). The population rare, weak 25% cell is a new miss that the gate does not touch (population rows
+at that rate use the map); its paired TPR is 0.72 and the calibrated 0.63. The visit shift is repaired to
+the same degree as before.
+
+Pooled clean test, seeds 41 to 80 (40 seeds; package output, 40 donors). Seeds 41 to 50 are the test above.
+Seeds 51 to 80 were scored once with the same logic (`9efa021`, which differs from `2742f05` only in
+roxygen text; arrays 25958071-9, access logged in `runs/2026-11-10_u2r4-clean.access.txt`). Nothing was
+tuned on them. Intervals are 95% bootstrap intervals that resample seeds (2000 draws,
+`scripts/82_pooled-clean-ci.R`, output in `runs/2026-11-10_u2r4-clean/pooled_41_80`). A cell is a real
+miss only if the upper limit of the TPR change is below -0.05.
+
+| Cell (option, effect, missing) | FPR gap | 95% CI | TPR change | 95% CI |
+|---|---|---|---|---|
+| donor, moderate, 10% | -0.022 | -0.053 to 0.011 | -0.006 | -0.019 to 0 |
+| donor, moderate, 25% | -0.019 | -0.048 to 0.010 | -0.002 | -0.008 to 0 |
+| donor, moderate, 50% | +0.023 | -0.008 to 0.058 | -0.005 | -0.010 to -0.001 |
+| population, moderate, 10% | +0.013 | -0.020 to 0.049 | -0.008 | -0.020 to 0 |
+| population, moderate, 25% | +0.029 | 0.005 to 0.055 | -0.007 | -0.015 to 0 |
+| population, moderate, 50% | +0.027 | -0.002 to 0.053 | -0.012 | -0.027 to -0.002 |
+| donor, rare, weak, 10% | -0.004 | -0.015 to 0.009 | -0.042 | -0.092 to 0 |
+| donor, rare, weak, 25% | +0.003 | -0.006 to 0.013 | -0.082 | -0.132 to -0.041 |
+| donor, rare, weak, 50% | +0.007 | -0.002 to 0.015 | -0.035 | -0.062 to -0.012 |
+| population, rare, weak, 10% | +0.008 | -0.006 to 0.023 | -0.004 | -0.015 to 0 |
+| population, rare, weak, 25% | +0.014 | 0.001 to 0.030 | -0.023 | -0.049 to -0.003 |
+| population, rare, weak, 50% | +0.014 | 0.005 to 0.024 | -0.011 | -0.024 to 0 |
+
+- FPR bar (gap at most 0.05): 12 of 12 cells. The largest gap is +0.029. No cell has a lower CI limit
+  above 0.05, so there is no real FPR miss. The raw rule passes 8 of 12 (largest gap +0.214).
+- TPR bar (change at least -0.05): 11 of 12 cells. The one miss is "donor", rare, weak, 25% missing
+  (-0.082). Its upper CI limit is -0.041, above -0.05, so it is not a real miss by the rule. Real
+  misses: 0 of 12. The two cells that missed in seeds 41 to 50 alone are at -0.082 and -0.023 here, so
+  the "population" miss was noise.
+- Seeds 51 to 80 alone: FPR bar 12 of 12 (largest gap +0.028), TPR bar 11 of 12 (same cell), worst
+  non-paired AUC change -0.006.
+- Later-visit FPR with the shift (pooled): moderate 0.05, 0.09, 0.16; rare, weak 0.05, 0.07, 0.21 at 10,
+  25, 50% missing, from 0.75 to 0.95. Switched share at the shifted visit: 94% (moderate), 81% (rare,
+  weak).
+- Runtime against the plain call, seeds 51 to 80: 13 to 16 times (medians 232 s one-visit
+  "population", 576 s two-visit "donor", 461 s two-visit "population"; plain 18 to 37 s).
+
+The remaining cost is power at a rare, weak effect with `"donor"` and 25% missing: about 8 points of
+TPR, with the upper CI limit at -4 points. Use a paired design, or `"population"`, when that effect size
+matters.

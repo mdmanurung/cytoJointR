@@ -60,12 +60,15 @@ compass_run_diagnostics <- function(fits, rhat_max = Inf) {
     donor_id = donors,
     compass_runs = length(fits),
     compass_runs_called = called,
-    compass_max_gamma = rowMeans(max_gamma),
+    compass_max_gamma_mean = rowMeans(max_gamma),
     compass_gamma_rhat = gm[, "rhat"], compass_gamma_ess = gm[, "ess"],
     compass_FS_rhat = fs[, "rhat"], compass_FS_ess = fs[, "ess"],
     compass_PFS_rhat = pf[, "rhat"], compass_PFS_ess = pf[, "ess"],
     row.names = NULL)
-  out$compass_call <- max_gamma[, 1L] > COMPASS_GAMMA_CALL # the call of the first run: the one cj_compass() reports
+  # The raw call of the first run: the one cj_compass() reports. With missing_control_calibrate,
+  # cj_compass() replaces compass_call by the calibrated call and keeps this one as compass_call_raw.
+  out$compass_call <- max_gamma[, 1L] > COMPASS_GAMMA_CALL
+  out$compass_call_raw <- out$compass_call
   out$compass_call_disagree <- out$compass_runs_called > 0L & out$compass_runs_called < length(fits)
   # Runs that make the same call as the reported one; a tie or less means the reported call is not backed.
   support <- ifelse(out$compass_call, out$compass_runs_called, length(fits) - out$compass_runs_called)

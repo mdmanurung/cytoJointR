@@ -1,5 +1,34 @@
 # cytoJointR 0.0.0.9000
 
+* `cj_compass()` with both `missing_control_calibrate` and `n_runs`/`diagnostics`: `compass_max_gamma`
+  is one column, the max mean gamma of run 1 (the reported fit). The mean over runs is now
+  `compass_max_gamma_mean`. Calibration refits the pseudo-missing donors against run 1 only (single runs).
+  `compass_call` is the calibrated call when calibration is on, else the raw call of run 1;
+  `compass_call_raw` is always the raw call of run 1, and `compass_call_unsupported` and
+  `compass_call_disagree` refer to it.
+
+* `cj_compass(missing_control_calibrate = TRUE)` calibrates the call for rows without a
+  paired control, without responder labels. Paired donors are pseudo-removed in folds
+  of 5 (`max_pseudo` 20 per partition, `pseudo_reps` 3 random partitions pooled), the run
+  is refitted, and an isotonic map of the paired gamma on the pseudo-missing gamma is
+  applied to the non-paired rows (never above the raw gamma). A run with fewer than 15
+  paired donors keeps the raw gamma when its pseudo-missing control calls no more donors than the paired
+  control does (at least 6 pseudo donors), and otherwise uses a fallback cut (gamma 0.85, from
+  simulation only). With `"donor"`, a run
+  whose borrowed control cannot rank donors (pseudo AUC below 0.7) is refitted with the
+  same-visit `"population"` control (`donor_switch`, default on) and marked `"switched"`.
+  Scores gain `compass_max_gamma` (always, as the last column so positional use is unchanged),
+  and with calibration `compass_gamma_cal`, `compass_call`, `calibration` and
+  `compass_max_gamma_switch`; the result gains `$calibration` (table, pseudo pairs, failed
+  refits, switched runs with their own calibration table). `cj_compass()` now restores the caller's `.Random.seed`, and the
+  option is ignored, with a warning, under `missing_control = "drop"`. On a clean held-out
+  simulation (40 donors, 40 seeds) the non-paired FPR was within 0.05 of the paired FPR in 12 of 12
+  cells (largest gap 0.03; raw rule 8 of 12, up to 0.21). The TPR bar (loss at most 0.05) held in 11 of
+  12 cells; the miss is `"donor"` at a rare, weak effect with 25% missing (-0.08, 95% CI -0.13 to -0.04).
+  A visit shift with `"donor"` is partly repaired by the switch (later-visit
+  FPR 0.05 to 0.16 at the moderate effect, 0.05 to 0.21 at the rare, weak one, from 0.75 to 0.95).
+  Cost is 13 to 16 times the plain call. `docs/adr/0003-compass-missing-control.md` has the numbers.
+
 * `cj_read_fcs()` reads pre-gated FCS files (one per sample) into the `cells` table, applying
   each file's spillover matrix (`compensate = TRUE`); markers are chosen by channel name or
   exact channel description. `cj_cells_from_gatingset()` does the same for one population of a

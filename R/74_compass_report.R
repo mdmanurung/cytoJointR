@@ -142,7 +142,7 @@ report_global <- function(sc, which) {
 #' rep[c("donor_id", "compass_response_degree1", "rms", "rms_lower", "rms_upper", "concordance")]
 #' }
 cj_compass_report <- function(x, markers = NULL, samples = NULL, gate = NULL, transform = NULL,
-                              control = "control", magnitude_model = c("c0", "m1dm"),
+                              control = "control", magnitude_model = c("c0", "c0eb", "m1dm"),
                               missing_control = c("drop", "donor", "population"),
                               level = 0.9, epsilon = REPORT_EPSILON,
                               response_threshold = 0.5, magnitude_floor = NULL,
@@ -166,6 +166,8 @@ cj_compass_report <- function(x, markers = NULL, samples = NULL, gate = NULL, tr
     x
   } else if (magnitude_model == "c0") {
     cj_fit_dirichlet(d, a0 = a0, n_draws = n_draws, seed = seed)
+  } else if (magnitude_model == "c0eb") {
+    do.call(cj_fit_dirichlet_eb, c(list(d, a0 = a0, n_draws = n_draws, seed = seed), fit_args))
   } else {
     do.call(cj_fit, c(list(d, model = "m1dm", level = "sample", seed = seed), fit_args))
   }

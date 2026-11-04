@@ -1,5 +1,11 @@
 # cytoJointR 0.0.0.9000
 
+* `cj_baseline_report()`: one row per donor and follow-up visit with COMPASS at the baseline and
+  follow-up visits beside the baseline-adjusted `cj_mimosa2()` call, and an `agreement` class
+  (`both`, `pre_existing`, `compass_only`, `mimosa2_only`, `neither`, `not_assessed`).
+  `pre_existing` marks donors COMPASS calls at both visits whose response MIMOSA2 does not
+  see rise.
+
 * `cj_mimosa2()` runs MIMOSA2 (github.com/RGLab/MIMOSA2, Suggests) for baseline-adjusted
   positivity calls: one fit per stimulation, parent population and follow-up visit, with each
   donor's stimulated and control samples at the baseline and the follow-up visit. One subset per

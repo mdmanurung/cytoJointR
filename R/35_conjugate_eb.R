@@ -19,7 +19,7 @@
 EB_Q_POINTS <- 300L # grid points for log q
 EB_R_POINTS <- 140L # grid points for log rho
 EB_LOG_RHO <- c(-5, 6) # range of log rho
-EB_SD_MIN <- 0.3 # lower bound of the fitted standard deviations (log scale); chosen on dev seeds 1-10, see runs/2026-11-08_compass-magnitudes
+EB_SD_MIN <- 0.2 # lower bound of the fitted standard deviations (log scale): the smallest dev value with rare_weak coverage >= 0.90 (0.92, 0.91); see runs/2026-11-08_compass-magnitudes
 EB_SD_MAX <- 3
 EB_KAPPA_MAX <- 1e4
 

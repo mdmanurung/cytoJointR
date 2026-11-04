@@ -11,6 +11,7 @@ COMPASS_CAL_FOLD_SIZE <- 5L   # paired donors pseudo-removed per refit
 COMPASS_CAL_MIN_PSEUDO <- 15L # fewest pseudo-missing donors per map (dev N-sweep: 10-14 paired donors gave FPR +0.11 over paired)
 COMPASS_CAL_MIN_SIDE <- 3L    # fewest pseudo donors with paired gamma above, and not above, 0.5
 COMPASS_CAL_MIN_AUC <- 0.8    # below this the pseudo gamma cannot rank donors; warn
+COMPASS_CAL_GATE_DONORS <- 6L  # fewest pseudo donors for the small-run gate below (dev: 8 and 10 lose the TPR gain)
 COMPASS_CAL_SWITCH_AUC <- 0.7  # donor runs with pseudo AUC below this switch to the same-visit population control
 COMPASS_CAL_SWITCH_POS <- 5L   # ... if at least this many pseudo donors have a paired call (AUC is noisy below that)
 # Fallback cut on raw max gamma (Option 2). From simulation only: the cut at which
@@ -136,6 +137,11 @@ compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, min_pse
       scores$compass_gamma_cal[rows] <- compass_cal_map(scores$compass_max_gamma[rows],
                                                         ps$gamma_pseudo, ps$gamma_paired, method)
       scores$calibration[rows] <- method
+    } else if (n_donor >= COMPASS_CAL_GATE_DONORS &&
+               mean(ps$gamma_pseudo > COMPASS_CAL_GAMMA) - mean(ps$gamma_paired > COMPASS_CAL_GAMMA) <= 0) {
+      # Too few pseudo donors for a map, but the pseudo-missing control calls no more donors than the paired
+      # control does: there is no excess to remove, and the fallback cut would only cost power.
+      scores$calibration[rows] <- "raw"
     } else {
       scores$compass_gamma_cal[rows] <- if (fallback) compass_cal_fallback(scores$compass_max_gamma[rows]) else
         scores$compass_max_gamma[rows]

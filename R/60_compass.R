@@ -527,10 +527,11 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
       }
     }
     n_fb <- sum(scores$calibration %in% "fallback")
+    n_raw <- sum(scores$calibration %in% "raw")
     low <- if (is.null(cal$info)) FALSE else
       cal$info$used_map & !cal$info$switched & !is.na(cal$info$pseudo_auc) & cal$info$pseudo_auc < COMPASS_CAL_MIN_AUC
     if (n_alt) message("missing_control_calibrate: ", sum(scores$calibration %in% cal_method), " row(s) mapped onto the ",
-            "paired scale (", cal_method, "), ", n_fb, " on the fallback cut (too few paired donors); ",
+            "paired scale (", cal_method, "), ", n_fb, " on the fallback cut and ", n_raw, " on the raw gamma (too few paired donors); ",
             "use compass_call, not max gamma > 0.5. Calibrated in simulation only (40 donors, 4 markers): ",
             "non-paired FPR was within 0.05 of the paired FPR in 12 of 12 cells on a clean held-out test (largest gap 0.05), but \"donor\" at a visit with a ",
             "shifted background is only partly repaired (switch); see docs/adr/0003-compass-missing-control.md.")

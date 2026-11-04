@@ -190,7 +190,7 @@ test_that("two groups get their own maps and the AUC is flagged only where the m
   pop <- runif(40)
   good <- data.frame(group = "g1", cls = "population", gamma_pseudo = pop, gamma_paired = as.numeric(pop > 0.7))
   bad <- data.frame(group = "g2", cls = "population", gamma_pseudo = pop, gamma_paired = as.numeric(pop < 0.7))
-  few <- data.frame(group = "g3", cls = "population", gamma_pseudo = pop[1:6], gamma_paired = as.numeric(pop[1:6] < 0.7))
+  few <- data.frame(group = "g3", cls = "population", gamma_pseudo = pop[1:5], gamma_paired = as.numeric(pop[1:5] < 0.7))
   sc <- cal_scores(c(0.9, 0.9, 0.9, 0.9), c("population", "population", "population", "paired"))
   gid <- c("g1", "g2", "g3", "g1")
   r <- cytoJointR:::compass_calibrate_scores(sc, gid, rbind(good, bad, few), "isotonic")
@@ -366,7 +366,7 @@ test_that("two stimulations are calibrated in their own groups", {
 test_that("repeated partitions give each paired donor one point per repeat and count donors once", {
   set.seed(7)
   pop <- runif(10)
-  one <- data.frame(group = "g", cls = "population", donor_id = 1:10, gamma_pseudo = pop,
+  one <- data.frame(group = "g", cls = "population", donor_id = 1:10, gamma_pseudo = pmin(1, pop + 0.4),
                     gamma_paired = as.numeric(pop > 0.5))
   rep3 <- rbind(one, one, one)      # 30 points but only 10 donors: below the 15-donor minimum
   sc <- cal_scores(0.9, "population")
@@ -474,4 +474,24 @@ test_that("switched groups keep their own calibration table and column exists wi
     iterations = 100, replications = 2, seed = 3)))
   expect_true("compass_max_gamma_switch" %in% names(none$scores))
   expect_true(all(is.na(none$scores$compass_max_gamma_switch)))
+})
+
+test_that("a run too small for a map keeps the raw gamma only when the pseudo control shows no excess calls", {
+  set.seed(8)
+  g <- runif(8)
+  mk <- function(pseudo, n = 8) data.frame(group = "g", cls = "population", donor_id = seq_len(n),
+                                           gamma_pseudo = pseudo[seq_len(n)], gamma_paired = g[seq_len(n)])
+  sc <- cal_scores(c(0.9, 0.6), c("population", "population"))
+  # No excess: the pseudo control calls what the paired one calls.
+  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), mk(g), "isotonic")
+  expect_equal(r$scores$calibration, c("raw", "raw"))
+  expect_equal(r$scores$compass_gamma_cal, c(0.9, 0.6))
+  expect_equal(r$scores$compass_call, c(TRUE, TRUE))
+  # Excess: the pseudo control calls more donors than the paired one -> the fallback cut.
+  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), mk(pmin(1, g + 0.5)), "isotonic")
+  expect_equal(unique(r$scores$calibration), "fallback")
+  expect_equal(r$scores$compass_call, c(TRUE, FALSE))
+  # Fewer than 6 pseudo donors: the fallback cut, whatever the pseudo calls.
+  r <- cytoJointR:::compass_calibrate_scores(sc, rep("g", 2), mk(g, 5), "isotonic")
+  expect_equal(unique(r$scores$calibration), "fallback")
 })

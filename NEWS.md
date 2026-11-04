@@ -1,5 +1,21 @@
 # cytoJointR 0.0.0.9000
 
+* `cj_baseline_report()`: one row per donor and follow-up visit with COMPASS at the baseline and
+  follow-up visits beside the baseline-adjusted `cj_mimosa2()` call, and an `agreement` class
+  (`both`, `pre_existing`, `compass_only`, `mimosa2_only`, `neither`, `not_assessed`).
+  `pre_existing` marks donors COMPASS calls at both visits whose response MIMOSA2 does not
+  see rise.
+
+* `cj_mimosa2()` is a native implementation of the MIMOSA2 design (ADR 0004; no upstream code, no
+  extra package) for baseline-adjusted positivity calls: one fit per stimulation, parent
+  population and follow-up visit, with each donor's stimulated and control samples at the baseline
+  and the follow-up visit. One subset per fit: `positive = "any"` (any marker positive) or one
+  marker. Donors without all four samples are listed in `excluded`. Scores give the four counts,
+  `delta`, `mimosa2_p_response`, `mimosa2_fdr` (q-values within one fit), `mimosa2_response` and
+  `control_source`; `cj_mimosa2_fit` objects are in `fits`. `missing_control = "marginal"` lets a
+  donor with one missing control enter. In a held-out simulation its false-positive rate stayed
+  within 0.05 of paired donors in 24 of 24 cells; it costs power (TPR 0.06 to 0.32 lower).
+
 * `cj_compass(n_runs = , diagnostics = )` checks convergence of the COMPASS call. COMPASS's
   `replications` are passes of one chain, not independent chains, so the check refits with seeds
   `seed`, `seed + 1`, ... (`diagnostics = TRUE` means at least 5 runs, so a call never ties) and treats the fits as chains.

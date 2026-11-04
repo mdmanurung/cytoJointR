@@ -109,10 +109,15 @@ sample, valid when it is missing at random.
 
 ## Validation of the rewrite
 
-1. The component log-likelihoods match upstream `cll()` on random parameters
-   to 1e-10 for components 2 to 11. Component 1 matches when levels 1 and 2
-   share a precision (our precision fix).
-2. On upstream's `simulate_MIMOSA2()` data and the package's hand-built data,
-   the native fit and upstream agree on calls, with Spearman correlation of
-   `P(response)` reported. The numbers are in a run README of the
-   reproducibility repository.
+Run on 2026-11-04 (reproducibility repository, `runs/2026-11-04_mimosa2-parity/`, script
+`113_mimosa2-parity.R`):
+
+1. **Component log-likelihoods** match upstream `cll()` on 200 random parameter sets: components 2 to 11 to
+   2.8e-9 absolute (about 1e-14 relative), component 1 to 1.9e-9 when levels 1 and 2 share a precision.
+2. **Fits** on ten `simulate_MIMOSA2()` data sets (100 donors) and the hand-built test data: calls agree on
+   91 to 100% of donors, Spearman of `P(response)` 0.945 to 0.983, 5 to 30 times faster.
+   - Mean AUC is 0.895 against upstream's 0.932. All of the gap comes from donors with negative `delta`:
+     the hard one-sided rule ties them at 0, while upstream's soft rule leaves values up to 1.7e-4 that still
+     rank. On donors with `delta >= 0` the AUCs agree within 0.012.
+   - Mean TPR at q < 0.01 is 0.641 against 0.685, at FPR 0 to 0.016 for both. Most of this gap is the
+     `log(pi)` weight (upstream `log1p(pi)` raised native TPR to 0.645 in an ablation).

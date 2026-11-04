@@ -28,7 +28,7 @@ usual MIMOSA2 default.}
 \item{tol, maxit}{EM stopping rule: stop when the log posterior changes by
 less than \code{tol} (relative), or after \code{maxit} iterations.}
 
-\item{missing_control}{\code{"drop"} (default) or \code{"marginal"} (experimental); see
+\item{missing_control}{\code{"drop"} (default) or \code{"marginal"}; see
 \emph{Details}.}
 }
 \value{
@@ -82,10 +82,21 @@ enters: that sample's count and total are set to 0, so its term drops out of
 the likelihood, and the initialisation and the one-sided rule use the donor's
 other control in its place. This assumes a background that is stable across
 visits, and rests on whether the stimulated sample sits at the high or the
-low level, an absolute rather than a within-donor contrast. \strong{It is
-experimental and not yet calibrated.} Donors missing a stimulated sample, or
+low level, an absolute rather than a within-donor contrast. Donors missing a stimulated sample, or
 both controls, stay excluded. \code{scores$control_source} is \code{"paired"},
 \code{"marginal: u1 missing"} or \code{"marginal: u0 missing"}.
+
+\strong{Calibration of \code{"marginal"}.} In simulation (60 donors; weak and
+moderate effects; stable background and a 1.5-fold rise between visits;
+between-donor background SD 0.5 and 1.0 on the logit scale; 10, 25 or 50\% of
+donors missing one control; 20 held-out seeds after 10 dev seeds;
+reproducibility repository, \verb{runs/2026-11-04_mimosa2-marginal-heldout/}),
+the false-positive rate of marginal donors at q < 0.01 stayed within 0.05 of
+that of paired donors in all 24 cells (largest excess +0.016). The cost is
+power: their TPR was 0.06 to 0.32 lower than with the control present, and
+their AUC 0.015 to 0.029 lower. With a background that rises between visits,
+paired donors also reached a false-positive rate of 0.05 to 0.12 at q < 0.01,
+so treat calls under a suspected background shift with care.
 
 \strong{Fit status.} The model has 8 level parameters and 11 components, so it
 needs many donors per fit (dozens at least). \code{groups$status} is \code{"fitted"},

@@ -208,10 +208,21 @@ print.cj_mimosa2_fit <- function(x, ...) {
 #' the likelihood, and the initialisation and the one-sided rule use the donor's
 #' other control in its place. This assumes a background that is stable across
 #' visits, and rests on whether the stimulated sample sits at the high or the
-#' low level, an absolute rather than a within-donor contrast. **It is
-#' experimental and not yet calibrated.** Donors missing a stimulated sample, or
+#' low level, an absolute rather than a within-donor contrast. Donors missing a stimulated sample, or
 #' both controls, stay excluded. `scores$control_source` is `"paired"`,
 #' `"marginal: u1 missing"` or `"marginal: u0 missing"`.
+#'
+#' **Calibration of `"marginal"`.** In simulation (60 donors; weak and
+#' moderate effects; stable background and a 1.5-fold rise between visits;
+#' between-donor background SD 0.5 and 1.0 on the logit scale; 10, 25 or 50% of
+#' donors missing one control; 20 held-out seeds after 10 dev seeds;
+#' reproducibility repository, `runs/2026-11-04_mimosa2-marginal-heldout/`),
+#' the false-positive rate of marginal donors at q < 0.01 stayed within 0.05 of
+#' that of paired donors in all 24 cells (largest excess +0.016). The cost is
+#' power: their TPR was 0.06 to 0.32 lower than with the control present, and
+#' their AUC 0.015 to 0.029 lower. With a background that rises between visits,
+#' paired donors also reached a false-positive rate of 0.05 to 0.12 at q < 0.01,
+#' so treat calls under a suspected background shift with care.
 #'
 #' **Fit status.** The model has 8 level parameters and 11 components, so it
 #' needs many donors per fit (dozens at least). `groups$status` is `"fitted"`,
@@ -227,7 +238,7 @@ print.cj_mimosa2_fit <- function(x, ...) {
 #'   usual MIMOSA2 default.
 #' @param tol,maxit EM stopping rule: stop when the log posterior changes by
 #'   less than `tol` (relative), or after `maxit` iterations.
-#' @param missing_control `"drop"` (default) or `"marginal"` (experimental); see
+#' @param missing_control `"drop"` (default) or `"marginal"`; see
 #'   *Details*.
 #' @return A `cj_mimosa2` list with `fits` (named list of `cj_mimosa2_fit`:
 #'   `z`, `pi`, `mu`, `log_precision`, `p_response`, `q`, `converged`,
@@ -271,7 +282,8 @@ cj_mimosa2 <- function(x, positive = "any", baseline_visit = NULL, fdr = 0.01, t
   if (!length(followups)) stop("MIMOSA2 needs a follow-up visit besides the baseline", call. = FALSE)
   marginal <- missing_control == "marginal"
   if (marginal)
-    message("missing_control = \"marginal\" is experimental and not yet calibrated")
+    message("missing_control = \"marginal\": donors with one missing control lose power ",
+            "(TPR 0.06 to 0.32 lower in simulation); their false-positive rate matched paired donors")
 
   # Positive cells of every sample: all but the all-negative pattern, or one marker's patterns.
   cols <- if (positive == "any") rowSums(x$bits) > 0 else x$bits[, positive] == 1L

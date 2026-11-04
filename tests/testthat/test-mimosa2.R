@@ -95,7 +95,7 @@ test_that("missing_control = 'marginal' keeps a donor with one missing control a
   x$contrasts$control_sample_id[x$contrasts$contrast_id == "D07_pre_CD4_CMV"] <- NA
   # D09 has no stimulated sample at baseline: no contrast row at the baseline visit.
   x$contrasts <- x$contrasts[x$contrasts$contrast_id != "D09_pre_CD4_CMV", ]
-  expect_message(mm <- cj_mimosa2(x, missing_control = "marginal"), "experimental and not yet calibrated")
+  expect_message(mm <- cj_mimosa2(x, missing_control = "marginal"), "lose power")
   s <- mm$scores
   expect_identical(s$control_source[s$donor_id == "D07"], "marginal: u0 missing")
   expect_identical(s$Nu0[s$donor_id == "D07"], 0)

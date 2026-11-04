@@ -87,7 +87,7 @@ take the running mean of `1 - P(response)`.
   (relative), or after `maxit` iterations. The fit reports whether it
   converged.
 
-## Missing samples (stage 2, planned before any result)
+## Missing samples (stage 2, planned before any result; result at the end)
 
 A missing sample has total 0 and count 0. Its beta-binomial term is then
 exactly 1, so it drops out of the likelihood: this is marginalising the missing
@@ -121,3 +121,14 @@ Run on 2026-11-04 (reproducibility repository, `runs/2026-11-04_mimosa2-parity/`
      rank. On donors with `delta >= 0` the AUCs agree within 0.012.
    - Mean TPR at q < 0.01 is 0.641 against 0.685, at FPR 0 to 0.016 for both. Most of this gap is the
      `log(pi)` weight (upstream `log1p(pi)` raised native TPR to 0.645 in an ablation).
+
+3. **`missing_control = "marginal"`**, calibrated as planned (reproducibility repository,
+   `runs/2026-11-04_mimosa2-marginal-dev/` and `-heldout/`, script `114_calibrate-mimosa2-marginal.R`).
+   - The design: 24 cells, crossing weak/moderate effect, background shift 1 or 1.5, between-donor
+     background SD 0.5 or 1.0, and 10, 25 or 50% of donors missing one control.
+   - The bar, fixed before the run: false-positive rate of marginal donors at q < 0.01 at most that of
+     paired donors + 0.05.
+   - It passed 24 of 24 cells on dev seeds 1 to 10 (largest excess +0.048) and 24 of 24 on held-out seeds
+     11 to 30 (+0.016). No fix was needed.
+   - TPR loss was 0.06 to 0.32, and AUC 0.015 to 0.029 lower than with the control present.
+   - Paired donors reached a false-positive rate of 0.05 to 0.12 when the background rose between visits.

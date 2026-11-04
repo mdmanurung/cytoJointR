@@ -211,9 +211,18 @@ compass_run_group <- function(prep, cg, verbose, ...) {
 #' is that the pseudo-missing donors resemble the truly missing ones (controls missing
 #' at random) and that the pseudo gamma ranks donors like the paired gamma. The second is
 #' checked: when the AUC of pseudo-missing gamma for the paired call is below 0.8, a
-#' warning says the calibrated calls there are unreliable. This is the case for `"donor"`
-#' at a visit whose background differs from the borrowed visit. Calibration cannot repair
-#' that case. Cost: about `1 + max_pseudo / 5` COMPASS fits per run with non-paired rows
+#' warning says the calibrated calls there are unreliable.
+#'
+#' **Limit: a visit effect with `"donor"`.** If the background differs between visits,
+#' calibration does not repair the false-positive rate at the visit whose control was
+#' borrowed from another visit (simulation: FPR 0.33 to 0.95 after calibration at the
+#' later visit, where the paired FPR is about 0.07). `control_shift_check` cannot warn
+#' about it when a donor has only one other control: with two visits it is always
+#' `"untestable"`, for every borrowed row, shifted or not. The detector to watch is the
+#' pseudo-AUC warning (`$calibration$table$pseudo_auc` below 0.8): it fired in every
+#' simulated run with the shift and in none of the moderate-effect runs without it. At a
+#' rare, weak effect it also fires in about 10 to 18% of runs without a shift. Where it
+#' fires, rank donors only and do not use `compass_call`. Cost: about `1 + max_pseudo / 5` COMPASS fits per run with non-paired rows
 #' (5 to 9 times the plain call in the simulation). Numbers:
 #' `docs/adr/0003-compass-missing-control.md`.
 #'

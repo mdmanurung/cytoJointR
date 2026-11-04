@@ -111,7 +111,11 @@ Card bars: non-paired FPR within paired + 0.05 held in 12 of 12 cells (largest g
 donors have a usable borrowed control, so the run uses the fallback cut) and
 `"population"` moderate at 10% missing (-0.05, from 1.00 to 0.95).
 
-Where it does not hold. `"donor"` with a visit effect (background x1.5 at visit 2): the
+Where it does not hold, in plain terms. With `"donor"` and a visit effect, calibration
+does not repair the false-positive rate at the visit whose control is borrowed. With two
+visits `control_shift_check` returns `"untestable"` for every borrowed row, so it cannot
+tell a shifted from an unshifted background. The detector to watch is the pseudo-AUC
+warning (`$calibration$table$pseudo_auc` below 0.8). Details: `"donor"` with a visit effect (background x1.5 at visit 2): the
 later visit keeps FPR 0.33 to 0.95 after calibration (0.82 to 0.95 raw at 10 to 25%
 missing at the moderate effect; 0.57 against 0.93 at 50%). Pseudo-missing gamma cannot
 rank donors there, and the calibration says so: the pseudo AUC is below 0.8 in 100% of
@@ -127,3 +131,10 @@ more than one stimulation are not simulated.
 Cost. 40 donors, 5000 iterations x 4 replications: the plain call takes 19 to 47 s and
 the calibrated call 97 to 394 s (5 to 9 times; held-out median). `max_pseudo` caps
 it: 20 costs about 5 times, 40 about 5 to 9 times.
+
+
+Fallback ablation (dev seeds 1 to 10, before the clean held-out test). Keeping the raw gamma
+for runs with too few pseudo donors, instead of the 0.85 cut, meets the FPR bar in 9 of 12
+cells (largest gap +0.118, `"donor"` moderate) against 12 of 12 (+0.049) with the cut.
+The cut costs power: TPR bar 10 of 12 against 12 of 12. The fallback stays because it earns
+its place on the FPR bar; its constant remains simulation-derived.

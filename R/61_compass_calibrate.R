@@ -113,7 +113,7 @@ compass_pseudo_fits <- function(x, ct, fits, gid, ord, nm, null_col, category_fi
 # Returns the scores with compass_gamma_cal, compass_call and calibration, and the
 # per group and class table of what was done.
 compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha = COMPASS_CAL_ALPHA,
-                                     min_pseudo = COMPASS_CAL_MIN_PSEUDO, null_when_sparse = FALSE) {
+                                     min_pseudo = COMPASS_CAL_MIN_PSEUDO, null_when_sparse = FALSE, fallback = TRUE) {
   scores$compass_gamma_cal <- scores$compass_max_gamma
   scores$calibration <- ifelse(scores$control_source == "paired", "paired", NA_character_)
   info <- list()
@@ -134,8 +134,9 @@ compass_calibrate_scores <- function(scores, gid_scores, pseudo, method, alpha =
                                                         ps$gamma_pseudo, ps$gamma_paired, m, alpha)
       scores$calibration[rows] <- m
     } else {
-      scores$compass_gamma_cal[rows] <- compass_cal_fallback(scores$compass_max_gamma[rows])
-      scores$calibration[rows] <- "fallback"
+      scores$compass_gamma_cal[rows] <- if (fallback) compass_cal_fallback(scores$compass_max_gamma[rows]) else
+        scores$compass_max_gamma[rows]
+      scores$calibration[rows] <- if (fallback) "fallback" else "raw"
     }
     info[[key]] <- data.frame(group = sub(" (donor_visit|population)$", "", key),
                               control_class = sub("^.* ", "", key), n_rows = length(rows),

@@ -48,7 +48,8 @@ test_that("concordance flags both kinds of disagreement and a missing control", 
     rep(c(0L, 400L, 400L, 400L), each = 3)
   resp <- c(0.9, 0.2, 0.9, 0.9, 0.2, 0.2)[seq_len(n)]
   rep <- cj_compass_report(x, compass = fake_compass(x, resp), n_draws = 500, seed = 1)
-  mag <- rep$rms_lower > 0
+  mag <- rep$rms_lower > 1e-4 # the default floor is the RMS epsilon
+  expect_equal(rep$magnitude_positive, mag)
   expect_true(all(mag[1:3]))
   expect_equal(as.character(rep$concordance[1:3]),
                c("response_with_magnitude", "magnitude_without_response", "response_with_magnitude"))

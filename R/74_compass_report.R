@@ -83,7 +83,10 @@ report_global <- function(sc, which) {
 #' @param response_threshold COMPASS response probability above which a donor
 #'   is called a responder.
 #' @param magnitude_floor The RMS interval must lie above this to count as a
-#'   positive magnitude.
+#'   positive magnitude. Default `NULL`: the RMS entry of `epsilon` (1e-4), so
+#'   "positive magnitude" is P(RMS > epsilon) > 0.95 for a 90% interval, the
+#'   benchmark's detection rule. A floor of 0 flags more donors, including
+#'   non-responders whose sampled stimulated and control wells differ by chance.
 #' @param n_boot Cell bootstrap replicates for NICR and Poly-NICR. `0` gives
 #'   point estimates only. Needs a cell data frame (or a `cj_data` built with
 #'   `keep_events = TRUE`).
@@ -123,11 +126,12 @@ cj_compass_report <- function(x, markers = NULL, samples = NULL, gate = NULL, tr
                               control = "control", magnitude_model = c("c0", "m1dm"),
                               missing_control = c("drop", "donor", "population"),
                               level = 0.9, epsilon = REPORT_EPSILON,
-                              response_threshold = 0.5, magnitude_floor = 0,
+                              response_threshold = 0.5, magnitude_floor = NULL,
                               n_boot = 0L, a0 = 0.5, n_draws = 4000L, seed = 1L,
                               fit_args = list(), compass = NULL, compass_args = list(),
                               gate_args = list()) {
   magnitude_model <- match.arg(magnitude_model)
+  if (is.null(magnitude_floor)) magnitude_floor <- epsilon[["RMS"]]
   missing_control <- match.arg(missing_control)
   is_fit <- inherits(x, "cj_fit")
   from_cells <- is.data.frame(x)

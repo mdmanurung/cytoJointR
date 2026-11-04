@@ -43,6 +43,7 @@ Test files are in `tests/testthat/`.
 | 7 | `cj_gate(method = "mindensity")` via `openCyto::gate_mindensity()` | NOT_RUN | openCyto aborts R on load on the development host (flowWorkspace segfault); the openCyto call is untested. Test gated on `CJ_TEST_OPENCYTO=true`. `method = "tail"` is in-package: current openCyto has no `gate_tail()` |
 | 7 | `cj_fluorescence_scores()`: NICR, Poly-NICR, frequency/intensity split, FIS, intensity-weighted FS/PFS (experimental), bootstrap | DONE | `test-adoption.R` (per-cell brute force, exact split, bootstrap); descriptive only, no Stan model, bootstrap covers within-sample cell sampling only |
 | 7 | `cj_run_compass()` | DONE | `test-adoption.R` end to end with COMPASS 1.48 under R 4.5.1 |
+| 7 | `cj_compass_report()`, `cj_plot_compass_report()`: COMPASS call beside C0 (default, no Stan) or m1dm RMS/CPS with 90% intervals, NICR from cells, concordance flag | DONE | `test-compass-report.R` (COMPASS-free via a stand-in table, plus a real COMPASS run); simulation and RV144-dev validation in `runs/2026-11-08_compass-magnitudes/` |
 | 7 | `cj_run_polyicsflow()` | NOT_RUN | polyICSFlow is not installed for R 4.5.1 and its flowWorkspace import segfaults; the wrapper was run only against polyICSFlow's own functions loaded from source, outside the package. Test skips |
 | 7 | `cj_quickstart()` | DONE | `test-adoption.R` (without `fit`) |
 | 6 | ComplexHeatmap output | PARTIAL | plots are ggplot2; ComplexHeatmap is only a Suggests entry and is not used |

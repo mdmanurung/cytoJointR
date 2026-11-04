@@ -16,7 +16,7 @@ cj_compass_report(
   level = 0.9,
   epsilon = REPORT_EPSILON,
   response_threshold = 0.5,
-  magnitude_floor = 0,
+  magnitude_floor = NULL,
   n_boot = 0L,
   a0 = 0.5,
   n_draws = 4000L,
@@ -48,7 +48,10 @@ another control get COMPASS numbers but no magnitude (\code{"not_assessed"}).}
 is called a responder.}
 
 \item{magnitude_floor}{The RMS interval must lie above this to count as a
-positive magnitude.}
+positive magnitude. Default \code{NULL}: the RMS entry of \code{epsilon} (1e-4), so
+"positive magnitude" is P(RMS > epsilon) > 0.95 for a 90\% interval, the
+benchmark's detection rule. A floor of 0 flags more donors, including
+non-responders whose sampled stimulated and control wells differ by chance.}
 
 \item{n_boot}{Cell bootstrap replicates for NICR and Poly-NICR. \code{0} gives
 point estimates only. Needs a cell data frame (or a \code{cj_data} built with

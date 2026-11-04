@@ -178,6 +178,40 @@ pf <- cj_run_polyicsflow(x)
 head(pf$net)
 ```
 
+## Magnitudes beside COMPASS calls
+
+COMPASS says who responds, not how large the response is. `cj_compass_report()`
+puts the cytoJointR magnitude and a 90% interval beside each COMPASS call, one
+row per donor, stimulation and visit. The default magnitude is the conjugate C0
+model (an independent Dirichlet posterior per sample): it needs no Stan and
+runs in seconds. `magnitude_model = "m1dm"` uses the structured posterior of
+[cj_fit()] instead. From a cell data frame the report also carries NICR and
+Poly-NICR with a cell bootstrap, per marker, in `attr(, "markers")`.
+
+```{r report, eval = has_compass}
+rep <- cj_compass_report(cells, markers, samples, transform = "none", control = "unstim",
+                         gate_args = list(method = "quantile"), n_boot = 50,
+                         compass_args = list(iterations = 200, replications = 2))
+rep
+rep[c("donor_id", "compass_response_degree1", "rms", "rms_lower", "rms_upper", "concordance")]
+head(attr(rep, "markers")[c("contrast_id", "marker", "nicr", "nicr_lo", "nicr_hi")], 4)
+```
+
+`concordance` compares the two answers. The COMPASS call is a response
+probability above 0.5. The magnitude is positive when the lower end of the RMS
+interval is above 0. `response_without_magnitude` (COMPASS calls a response, the
+RMS interval includes 0) and `magnitude_without_response` mark rows to look at.
+They are prompts, not errors: a call and an interval answer different questions.
+C0 intervals describe the sampled donor-visit only; see `?cj_compass_report`
+for what they do and do not cover.
+
+```{r report-plot, eval = has_compass, fig.height = 3.5}
+cj_plot_compass_report(rep)
+```
+
+Position is the RMS with its interval; colour is the COMPASS response
+probability; triangles are discordant rows.
+
 ## Everything at once
 
 `cj_quickstart()` chains gate, data, description, fluorescence scores and, when

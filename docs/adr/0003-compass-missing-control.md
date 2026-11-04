@@ -224,3 +224,54 @@ The pseudo draw sorts paired donors by ID first, so it does not depend on the ro
 data. The unused ablation options (bootstrap band, population and pooled maps for short donor
 runs, the no-excess gate, the null-quantile map) were removed from the package; they remain in git
 history (commit d478ef2) and in `scripts/78`.
+
+## Round 3 (2026-11-10): the small-run gate
+
+Gap: the TPR bar in the three "donor" rare, weak cells (-0.08, -0.15, -0.32 on seeds 31 to 40).
+Dev seeds 1 to 10 showed where it sits: fallback rows (runs too small for a map) lost most of the
+power (TPR 0.41 to 0.17 at 50% missing, 0.50 to 0.24 at 25%) while rows calibrated by the map lost
+little (0.85 to 0.79). At 50% missing only about half of the paired donors have the other visit's
+control, so a "donor" run has about 10 usable pseudo donors.
+
+Kept: in a run with at least 6 pseudo donors but too few for a map, keep the raw gamma when the
+pseudo-missing control calls no more of those donors than the paired control does; otherwise the
+fallback cut applies. A rare, weak response shows no such excess (raw FPR 0.00 to 0.03); a moderate one
+does. Dev: TPR bar 8 to 10 of 12, donor rare, weak TPR change -0.04, -0.09, -0.03 (from -0.06, -0.17,
+-0.23), FPR bar 11 of 12 as before (the same donor moderate 25% cell, +0.059 to +0.069). The worst-seed
+gap in donor moderate 50% rose from 0.04 to 0.12 because the gate is noisy with few donors, so the margin
+of those cells is thinner. Minimum 6 donors; 8 and 10 lose the gain. The round-2 gate (on map rows) was
+dropped for the same reason in the opposite place: here there is no map to fall back on.
+
+Tried and not kept (dev):
+- A Neyman-Pearson cut (the (1 - alpha) quantile of the pseudo-missing gamma among paired negatives, never
+  below 0.5; rows above it keep the raw gamma) in place of the fallback: no change. In place of the map:
+  alpha 0.10 gives TPR bar 10 of 12 but FPR bar 10 of 12; 0.05 and 0.02 give TPR 7 and 6. With about 10
+  usable donors the high quantile of the negatives is close to their maximum, as strict as the fallback.
+- Shrinking the borrowed control toward the same-visit population control with an empirical-Bayes weight
+  (between-donor against visit-to-visit variance, `scripts/81`): the weight is 1 without a visit effect
+  and 0 with a 1.5-fold shift, so it is either a no-op or the switch itself. It cannot raise TPR in the
+  unshifted cells. As a second switch trigger for shifts the pseudo AUC misses it is untested.
+- Pooling the donor-visit pseudo points of all visits for the map: no gain (about 20 pairs with 3 to 5
+  donors with a paired call).
+
+Clean test, seeds 41 to 50 (package output, 40 donors, scored once with `2742f05`,
+`runs/2026-11-10_u2r3-clean`), next to seeds 31 to 40:
+
+| Measure | Seeds 31-40 | Seeds 41-50 |
+|---|---|---|
+| FPR bar, cells passing | 12 of 12 | 12 of 12 |
+| Largest FPR gap | +0.049 | +0.043 ("population", moderate, 50%) |
+| Raw rule, cells passing | 9 of 12 | 8 of 12 (largest gap +0.215) |
+| TPR bar, cells passing | 9 of 12 | 10 of 12 |
+| "donor" rare, weak TPR change at 10, 25, 50% | -0.08, -0.15, -0.32 | -0.02, -0.085, -0.03 |
+| Other TPR failure | none | "population" rare, weak 25%: -0.075 |
+| Worst non-paired AUC change | -0.021 | -0.017 |
+| Later-visit FPR, moderate | 0.05, 0.07, 0.21 | 0.08, 0.09, 0.24 |
+| Later-visit FPR, rare, weak | 0.47, 0.04, 0.25 | 0.05, 0.10, 0.30 |
+| Switched share at the shifted visit | 92% / 71% | 87% / 77% |
+| Runtime against the plain call | 12 to 14 times | 12 to 15 times |
+
+The donor rare, weak TPR now loses at most 0.085 and one of the three cells still misses the bar (25%,
+by 0.035). The population rare, weak 25% cell is a new miss that the gate does not touch (population rows
+at that rate use the map); its paired TPR is 0.72 and the calibrated 0.63. The visit shift is repaired to
+the same degree as before.

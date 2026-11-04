@@ -209,8 +209,10 @@ compass_run_group <- function(prep, cg, verbose, seed = 100L, posterior = TRUE, 
 #'
 #' A map needs at least 15 distinct pseudo donors, so at least 15 paired donors in the run
 #' (with a usable borrowed control for `"donor"`), and at least 3 pseudo donors with a paired
-#' gamma above 0.5 and 3 not above it. Otherwise the run uses a fallback cut: raw gamma 0.85 is
-#' sent to 0.5. That cut comes from simulation only (the cut at which non-paired FPR met paired
+#' gamma above 0.5 and 3 not above it. Otherwise the run is too small for a map. If it has at least 6
+#' pseudo donors and the pseudo-missing control calls no more of them than the paired control does
+#' (no excess of calls to remove), it keeps the raw gamma (`calibration = "raw"`). In every other case it
+#' uses a fallback cut: raw gamma 0.85 is sent to 0.5. That cut comes from simulation only (the cut at which non-paired FPR met paired
 #' FPR on the dev seeds of `runs/2026-11-07_compass-missing-control/`); it depends on that
 #' design, and it costs power at a rare, weak effect. The assumption is that the pseudo-missing
 #' donors resemble the truly missing ones (controls missing at random) and that the pseudo

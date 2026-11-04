@@ -12,7 +12,9 @@
   of 5 (`max_pseudo` 20 per partition, `pseudo_reps` 3 random partitions pooled), the run
   is refitted, and an isotonic map of the paired gamma on the pseudo-missing gamma is
   applied to the non-paired rows (never above the raw gamma). A run with fewer than 15
-  paired donors uses a fallback cut (gamma 0.85, from simulation only). With `"donor"`, a run
+  paired donors keeps the raw gamma when its pseudo-missing control calls no more donors than the paired
+  control does (at least 6 pseudo donors), and otherwise uses a fallback cut (gamma 0.85, from
+  simulation only). With `"donor"`, a run
   whose borrowed control cannot rank donors (pseudo AUC below 0.7) is refitted with the
   same-visit `"population"` control (`donor_switch`, default on) and marked `"switched"`.
   Scores gain `compass_max_gamma` (always, as the last column so positional use is unchanged),

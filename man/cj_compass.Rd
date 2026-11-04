@@ -49,7 +49,9 @@ A \code{cj_compass} list with \code{fits} (named list of \code{COMPASSResult}),
 convergence columns), \code{groups} (one
 row per COMPASS run with its status), \code{filters} (what the category filter
 removed per run), \code{excluded} (contrasts left out, with the reason) and
-\code{diagnostics} (\code{NULL}, or with \code{n_runs > 1} a list: \code{n_runs}, \code{seeds}, \code{summary}).
+\code{diagnostics} (\code{NULL}, or with \code{n_runs > 1} a list: \code{n_runs}, \code{seeds},
+\code{summary}). A run group whose extra runs fail keeps its fit and scores, has
+\code{NA} convergence columns, and says so in \code{groups$status}.
 }
 \description{
 Runs one \code{COMPASS::SimpleCOMPASS()} per stimulation, visit and parent
@@ -148,9 +150,9 @@ R-hats exceeds \code{rhat_max} (\code{compass_rhat_high}).
 }
 
 Which flag to read (simulation: 40 donors, 4 markers, 12 data sets with weak
-effects, 10x-iterations reference from 4 seeds,
-\verb{runs/2026-11-08_compass-diagnostics-v3/}; 18 of 480 donors had a reported
-call that differed from the reference at COMPASS's default iterations):
+effects, 10x-iterations reference from 4 seeds; 18 of 480 donors had a
+reported call that differed from the reference at COMPASS's default
+iterations):
 \itemize{
 \item \code{unstable_call} finds the donors whose call is not reproducible. It caught
 18 of 18 wrong reported calls, but 52 donors were flagged: in most of them

@@ -165,9 +165,9 @@ compass_resolve_controls <- function(x, missing_control) {
 #'   R-hats exceeds `rhat_max` (`compass_rhat_high`).
 #'
 #' Which flag to read (simulation: 40 donors, 4 markers, 12 data sets with weak
-#' effects, 10x-iterations reference from 4 seeds,
-#' `runs/2026-11-08_compass-diagnostics-v3/`; 18 of 480 donors had a reported
-#' call that differed from the reference at COMPASS's default iterations):
+#' effects, 10x-iterations reference from 4 seeds; 18 of 480 donors had a
+#' reported call that differed from the reference at COMPASS's default
+#' iterations):
 #' * `unstable_call` finds the donors whose call is not reproducible. It caught
 #'   18 of 18 wrong reported calls, but 52 donors were flagged: in most of them
 #'   the reported call happened to be the right one (precision 0.35).
@@ -216,7 +216,9 @@ compass_resolve_controls <- function(x, missing_control) {
 #'   convergence columns), `groups` (one
 #'   row per COMPASS run with its status), `filters` (what the category filter
 #'   removed per run), `excluded` (contrasts left out, with the reason) and
-#'   `diagnostics` (`NULL`, or with `n_runs > 1` a list: `n_runs`, `seeds`, `summary`).
+#'   `diagnostics` (`NULL`, or with `n_runs > 1` a list: `n_runs`, `seeds`,
+#'   `summary`). A run group whose extra runs fail keeps its fit and scores, has
+#'   `NA` convergence columns, and says so in `groups$status`.
 #' @export
 #' @examplesIf requireNamespace("COMPASS", quietly = TRUE)
 #' \donttest{
@@ -328,7 +330,8 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
       more <- tryCatch(lapply(seed0 + seq_len(n_runs - 1L), function(sd) quiet(run(sd, posterior = FALSE))),
                        error = function(e) conditionMessage(e))
       if (is.character(more)) {
-        groups[[g]]$status <- paste("failed (extra runs):", more)
+        # The fit and its scores stand; only the convergence columns are missing for this group.
+        groups[[g]]$status <- paste0("fitted (extra runs failed: ", more, ")")
       } else {
         diag[[g]] <- cbind(group = g, compass_run_diagnostics(c(list(fit), more), rhat_max))
         seconds[g] <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
@@ -354,6 +357,12 @@ cj_compass <- function(x, category_filter = COMPASS_DEFAULT_FILTER, verbose = FA
                          row.names = NULL)
   }
   bind <- function(l) if (length(l)) do.call(rbind, unname(l))
+  # A group whose extra runs failed has no convergence columns: pad them with NA.
+  cols <- unique(unlist(lapply(tidy, names)))
+  tidy <- lapply(tidy, function(t) {
+    t[setdiff(cols, names(t))] <- NA
+    t[cols]
+  })
   scores <- bind(tidy)
   diagnostics_out <- NULL
   if (length(diag))

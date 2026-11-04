@@ -49,6 +49,7 @@ compass_run_diagnostics <- function(fits, rhat_max = Inf) {
     mg <- f$fit$mean_gamma
     apply(mg[, -ncol(mg), drop = FALSE], 1L, max)[donors]
   }, numeric(length(donors)))
+  if (anyNA(max_gamma)) stop("mean gamma has missing values; the calls cannot be compared", call. = FALSE)
   max_gamma <- matrix(max_gamma, nrow = length(donors), dimnames = list(donors, NULL))
   stat <- function(q) t(vapply(seq_along(donors), function(i)
     compass_rhat_ess(vapply(draws, function(d) d[[q]][, i], numeric(nrow(draws[[1L]][[q]])))),
@@ -91,12 +92,15 @@ compass_diagnostics_summary <- function(diag, seconds, n_runs) {
 
 # Validate n_runs / diagnostics. diagnostics = TRUE means at least 5 runs.
 compass_n_runs <- function(n_runs, diagnostics) {
-  if (!is.numeric(n_runs) || length(n_runs) != 1L || is.na(n_runs) || n_runs < 1)
-    stop("n_runs must be a whole number >= 1", call. = FALSE)
+  if (!is.numeric(n_runs) || length(n_runs) != 1L || !is.finite(n_runs) || n_runs < 1 || n_runs != round(n_runs))
+    stop("n_runs must be a finite whole number >= 1", call. = FALSE)
   n_runs <- as.integer(n_runs)
   if (isTRUE(diagnostics)) n_runs <- max(n_runs, COMPASS_DIAG_MIN_RUNS)
   if (n_runs %in% 2:3)
-    warning("n_runs = ", n_runs, " gives weak diagnostics; use 5 or more (odd, so a call never ties)", call. = FALSE)
+    warning("n_runs = ", n_runs, " gives weak diagnostics; use 5 or more", call. = FALSE)
+  if (n_runs > 3L && n_runs %% 2L == 0L)
+    warning("n_runs = ", n_runs, " is even: a 50/50 split of the runs counts the reported call as ",
+            "unsupported (compass_call_unsupported); use an odd number", call. = FALSE)
   if (n_runs > 1L && !requireNamespace("posterior", quietly = TRUE))
     stop("The posterior package is required for n_runs > 1", call. = FALSE)
   n_runs
